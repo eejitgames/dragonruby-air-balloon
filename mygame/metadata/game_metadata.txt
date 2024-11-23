@@ -75,6 +75,7 @@
 #       think about what you want to render outside of the games main 1280x720 logical
 #       area.
 # hd_letterbox=true
+hd_letterbox=false
 
 # === Scaling options for All Screen Mode ===
 # You can specify the maximum scale for your game. hd_max_scale's default value is 0 which

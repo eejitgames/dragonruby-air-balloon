@@ -13,6 +13,7 @@ end
 
 def reset args
   $game = nil
+  $gtk.set_rng($gtk.seed + 1)
 end
 
 $gtk.reset

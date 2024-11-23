@@ -20,8 +20,9 @@ class Game
 
   def tick_title_scene
     outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
+    create_cloud_maze
 
-    if $gtk.args.inputs.mouse.click
+    if $gtk.args.inputs.mouse.click && @maze_is_ready
       @next_scene = :tick_game_scene
       audio[:music].paused = false
     end
@@ -59,16 +60,16 @@ class Game
       @vector_x = 0
       @vector_y = 0
     end
-
+=begin
     if inputs.keyboard.key_down.forward_slash
       @room_number = (1023 * rand).to_i
     end
+=end
   end
 
   def calc
     return if game_has_lost_focus?
 
-    # update player x and y, also prevent player from going too far forward/back in the scene
     @player.x = (@player.x + @vector_x).cap_min_max(0, 1)
     @player.y = (@player.y + @vector_y).cap_min_max(0, 1)
 
@@ -78,9 +79,8 @@ class Game
   def render
     @render_items = []
     @render_items << { x: 0, y: 0, w: 1280, h: 720, path: 'sprites/cloudy_background.png' }
-
     # draw_debug_grid
-    draw_inner_walls
+    @render_items << @cloudy_maze
     draw_player
     outputs.primitives << @render_items
   end
@@ -107,12 +107,14 @@ class Game
   # draw inner walls in room, forming a simple maze with wide corridors
   def draw_inner_walls
     @wall_seed = @room_number
-    draw_wall_segment(x: 1, y: 2, dir: get_direction)
-    draw_wall_segment(x: 2, y: 2, dir: get_direction)
-    draw_wall_segment(x: 3, y: 2, dir: get_direction)
-    draw_wall_segment(x: 1, y: 1, dir: get_direction)
-    draw_wall_segment(x: 2, y: 1, dir: get_direction)
-    draw_wall_segment(x: 3, y: 1, dir: get_direction)
+    @room = []
+    @room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
+    @room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
+    @room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
+    @room << draw_wall_segment(x: 1, y: 1, dir: get_direction)
+    @room << draw_wall_segment(x: 2, y: 1, dir: get_direction)
+    @room << draw_wall_segment(x: 3, y: 1, dir: get_direction)
+    @room
   end
 
   # function to draw wall segments, pass in the x, y coordinates, and the direction to draw the segment
@@ -123,49 +125,25 @@ class Game
       yc = (y * @section_height - @wall_thickness + @wall_thickness / 2).to_i
       wc = @wall_thickness
       hc = @section_height + @wall_thickness
-      @render_items <<  {
-        x: xc,
-        y: yc,
-        w: wc,
-        h: hc,
-        path: 'sprites/vertical_cloud_wall.png',
-      }
+      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
     when :S
       xc = (x * @section_width - @wall_thickness / 2).to_i
       yc = ((y - 1) * @section_height - @wall_thickness + @wall_thickness / 2).to_i
       wc = @wall_thickness
       hc = @section_height + @wall_thickness
-      @render_items <<  {
-        x: xc,
-        y: yc,
-        w: wc,
-        h: hc,
-        path: 'sprites/vertical_cloud_wall.png',
-      }
+      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
     when :E
       xc = (x * @section_width - @wall_thickness / 2).to_i
       yc = (y * @section_height - @wall_thickness / 2).to_i
       wc = @section_width + @wall_thickness
       hc = @wall_thickness
-      @render_items <<  {
-        x: xc,
-        y: yc,
-        w: wc,
-        h: hc,
-        path: 'sprites/horizontal_cloud_wall.png',
-      }
+      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
     when :W
       xc = ((x - 1) * @section_width - @wall_thickness / 2).to_i
       yc = (y * @section_height - @wall_thickness / 2).to_i
       wc = @section_width + @wall_thickness
       hc = @wall_thickness
-      @render_items <<  {
-        x: xc,
-        y: yc,
-        w: wc,
-        h: hc,
-        path: 'sprites/horizontal_cloud_wall.png',
-      }
+      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
     end
   end
 
@@ -232,13 +210,27 @@ class Game
     @lost_focus = focus
   end
 
+  def create_cloud_maze
+    return if @maze_is_ready
+    @tile_x ||= 0
+    @tile_y ||= 0
+
+    @cloudy_maze << draw_inner_walls
+    # tile_path = "sprites/tile-#{args.state.tile_x}-#{args.state.tile_y}.png"
+    @maze_is_ready = :true
+  end
+
   def defaults
     return if @defaults_set
     @lost_focus = true
     @clock = 0
-    @room_number = 0x0153 # 339 decimal
+    @room_number = (512 * rand).to_i # x0153
     @current_scene = :tick_title_scene
     @next_scene = nil
+    @cloudy_maze = []
+    @maze_is_ready = nil
+    @tile_x = nil
+    @tile_y = nil
     @screen_height = 720
     @screen_width = 1280
     @section_width = 320
@@ -249,7 +241,7 @@ class Game
     @player = {
       x: 0.5,
       y: 0.15,
-      speed: 0.005,
+      speed: 0.003,
     }
     audio[:music] = {
       input: "sounds/InGameTheme20secGJ.ogg",
