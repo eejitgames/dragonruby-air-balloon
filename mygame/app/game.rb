@@ -138,7 +138,6 @@ class Game
   def draw_wall_segment(x:, y:, dir:)
     camera_x = x_to_screen(@camera.x)
     camera_y = y_to_screen(@camera.y)
-    puts "calculated camera_x is #{camera_x}"
 
     case dir
     when :N
