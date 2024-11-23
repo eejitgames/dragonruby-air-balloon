@@ -70,8 +70,13 @@ class Game
   def calc
     return if game_has_lost_focus?
 
+    # Calc Player
     @player.x = (@player.x + @vector_x).cap_min_max(0, 1)
     @player.y = (@player.y + @vector_y).cap_min_max(0, 1)
+
+    # Calc Camera
+    @camera.x = @player.x - @camera.offset_x
+    @camera.y = @player.y - @camera.offset_y
 
     @clock += 1
   end
@@ -80,7 +85,10 @@ class Game
     @render_items = []
     @render_items << { x: 0, y: 0, w: 1280, h: 720, path: 'sprites/cloudy_background.png' }
     # draw_debug_grid
-    @render_items << @cloudy_maze
+
+    # Draw the maze each frame
+    @render_items << draw_inner_walls
+
     draw_player
     outputs.primitives << @render_items
   end
@@ -106,8 +114,17 @@ class Game
 
   # draw inner walls in room, forming a simple maze with wide corridors
   def draw_inner_walls
+    # Find visible area
+    min_x = @camera.x
+    max_x = @camera.x + 1.0
+    min_y = @camera.y
+    max_y = @camera.y + 1.0
+
+
     @wall_seed = @room_number
     @room = []
+
+    # TODO: skip drawing if outside the visible area
     @room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
     @room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
     @room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
@@ -119,31 +136,34 @@ class Game
 
   # function to draw wall segments, pass in the x, y coordinates, and the direction to draw the segment
   def draw_wall_segment(x:, y:, dir:)
+    camera_x = x_to_screen(@camera.x)
+    camera_y = y_to_screen(@camera.y)
+
     case dir
     when :N
       xc = (x * @section_width - @wall_thickness / 2).to_i
       yc = (y * @section_height - @wall_thickness + @wall_thickness / 2).to_i
       wc = @wall_thickness
       hc = @section_height + @wall_thickness
-      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
+      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
     when :S
       xc = (x * @section_width - @wall_thickness / 2).to_i
       yc = ((y - 1) * @section_height - @wall_thickness + @wall_thickness / 2).to_i
       wc = @wall_thickness
       hc = @section_height + @wall_thickness
-      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
+      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
     when :E
       xc = (x * @section_width - @wall_thickness / 2).to_i
       yc = (y * @section_height - @wall_thickness / 2).to_i
       wc = @section_width + @wall_thickness
       hc = @wall_thickness
-      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
+      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
     when :W
       xc = ((x - 1) * @section_width - @wall_thickness / 2).to_i
       yc = (y * @section_height - @wall_thickness / 2).to_i
       wc = @section_width + @wall_thickness
       hc = @wall_thickness
-      { x: xc, y: yc, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
+      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
     end
   end
 
@@ -175,8 +195,8 @@ class Game
     @player_sprite_path = "sprites/balloon_#{player_sprite_index + 1}.png"
 
     @render_items << {
-      x: x_to_screen(@player.x),
-      y: y_to_screen(@player.y),
+      x: x_to_screen(@player.x - @camera.x),
+      y: y_to_screen(@player.y - @camera.y),
       w: 120,
       h: 176,
       anchor_x: 0.5,
@@ -253,6 +273,10 @@ class Game
       paused: true,
       looping: true
     }
+
+    # Camera
+    @camera ||= { x: 0.0, y: 0.0, offset_x: 0.5, offset_y: 0.5 }
+
     @defaults_set = :true
   end
 end
