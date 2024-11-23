@@ -60,11 +60,6 @@ class Game
       @vector_x = 0
       @vector_y = 0
     end
-=begin
-    if inputs.keyboard.key_down.forward_slash
-      @room_number = (1023 * rand).to_i
-    end
-=end
   end
 
   def calc
@@ -107,14 +102,16 @@ class Game
   # draw inner walls in room, forming a simple maze with wide corridors
   def draw_inner_walls
     @wall_seed = @room_number
-    @room = []
-    @room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
-    @room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
-    @room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
-    @room << draw_wall_segment(x: 1, y: 1, dir: get_direction)
-    @room << draw_wall_segment(x: 2, y: 1, dir: get_direction)
-    @room << draw_wall_segment(x: 3, y: 1, dir: get_direction)
-    @room
+    room = []
+    # there are 6 clouds per room
+    # add a looping structure to make 2 x 20 'rooms'
+    room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
+    room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
+    room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
+    room << draw_wall_segment(x: 1, y: 1, dir: get_direction)
+    room << draw_wall_segment(x: 2, y: 1, dir: get_direction)
+    room << draw_wall_segment(x: 3, y: 1, dir: get_direction)
+    room
   end
 
   # function to draw wall segments, pass in the x, y coordinates, and the direction to draw the segment
@@ -212,11 +209,8 @@ class Game
 
   def create_cloud_maze
     return if @maze_is_ready
-    @tile_x ||= 0
-    @tile_y ||= 0
 
     @cloudy_maze << draw_inner_walls
-    # tile_path = "sprites/tile-#{args.state.tile_x}-#{args.state.tile_y}.png"
     @maze_is_ready = :true
   end
 
