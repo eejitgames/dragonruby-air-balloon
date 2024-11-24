@@ -68,9 +68,9 @@ class Game
     @vector_x *= @player.damping
     @vector_y *= @player.damping
 
-    # Calc Wind Noise
+    # Calc Wind
     new_wind_gain = Math.sqrt(@vector_x * @vector_x + @vector_y * @vector_y) * 500.0
-    audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, 0.05)
+    audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, 0.08)
 
     # Calc Camera
     @camera.x = @player.x - @camera.offset_x
@@ -91,6 +91,7 @@ class Game
 
     # Draw the maze each frame
     @render_items << draw_inner_walls
+
     draw_player
 
     # Draw foreground
@@ -105,7 +106,7 @@ class Game
     parallax_offset_y = (@player.y * @screen_height * parallax_multiplier) % @bg_h
 
     # Determine how many tiles are needed to cover the screen
-    tiles_x = (@screen_width / @bg_w.to_f).ceil + 2
+    tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
     tiles_y = (@screen_height / @bg_h.to_f).ceil + 1
 
     # Draw the tiles
@@ -168,6 +169,7 @@ class Game
     end
 
     # Create x, y pairs
+    # TODO: skip drawing if outside the visible area
     pairs = []
     x_values.each do |x|
       y_values.each do |y|
@@ -284,73 +286,8 @@ class Game
     @maze_is_ready = :true
   end
 
-  def prepare_grid(rows, columns)
-    Array.new(rows) do |row|
-      Array.new(columns) do |column|
-        {
-          row: row,
-          column: column,
-          north: nil,
-          south: nil,
-          west: nil,
-          east: nil,
-        }
-      end
-    end
-  end
-
-  def configure_cells(grid)
-    grid.each do |row|
-      row.each do |cell|
-        next unless cell
-
-        row, col = cell[:row], cell[:column]
-
-        cell[:north] = grid[row - 1][col] if row > 0
-        cell[:south] = grid[row + 1][col] if row < grid.size - 1
-        cell[:west]  = grid[row][col - 1] if col > 0
-        cell[:east]  = grid[row][col + 1] if col < grid[0].size - 1
-      end
-    end
-  end
-
-  def draw_maze
-    x = 0
-    while x < @maze_w
-      y = 0
-      while y > @maze_h
-        # hack -- skip cells that don't exist
-        unless @grid[y]
-          y += 1
-          next
-        end
-        unless @grid[y][x]
-          y += 1
-          next
-        end
-
-        cell = @grid[y][x]
-        if cell
-          @render_items << { x: x * @section_width - @camera.x * @screen_width, y: y * @section_height - @camera.x * @screen_height, w: @section_width, h: @section_height, r: 255, g: 255, b: 255, primitive_marker: :solid }
-        end
-
-        y += 1
-      end
-      x += 1
-    end
-  end
-
   def defaults
     return if @defaults_set
-
-    # Generate Maze
-    @maze_w = 10
-    @maze_h = 40
-
-    @grid = prepare_grid(@maze_h, @maze_w)
-    configure_cells(@grid)
-    Maze.on(@grid)
-
     @lost_focus = true
     @clock = 0
     @room_number = (512 * rand).to_i # x0153
@@ -380,8 +317,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      #gain: 0.15,
-      gain: 0.0,
+      gain: 0.15,
       pitch: 1.0,
       paused: true,
       looping: true
@@ -391,7 +327,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 1.2,
+      gain: 0.0,
       pitch: 1.0,
       paused: true,
       looping: true
