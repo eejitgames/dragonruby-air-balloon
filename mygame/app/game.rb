@@ -56,12 +56,6 @@ class Game
     @vector_y = (@vector_y + inputs.up_down_perc * @player.speed).clamp(-@player.max_speed, @player.max_speed)
     @player_flip = false if @vector_x > 0
     @player_flip = true if @vector_x < 0
-
-=begin
-    if inputs.keyboard.key_down.forward_slash
-      @room_number = (1023 * rand).to_i
-    end
-=end
   end
 
   def calc
@@ -69,8 +63,8 @@ class Game
 
     # Calc Player
     @player.y += @player.rising
-    @player.x = (@player.x + @vector_x).cap_min_max(0, 1)
-    @player.y = (@player.y + @vector_y).cap_min_max(0, 1)
+    @player.x = (@player.x + @vector_x)
+    @player.y = (@player.y + @vector_y)
     @vector_x *= @player.damping
     @vector_y *= @player.damping
 
@@ -157,16 +151,16 @@ class Game
   # draw inner walls in room, forming a simple maze with wide corridors
   def draw_inner_walls
     @wall_seed = @room_number
-    @room = []
+    room = []
 
     # TODO: skip drawing if outside the visible area
-    @room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
-    @room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
-    @room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
-    @room << draw_wall_segment(x: 1, y: 1, dir: get_direction)
-    @room << draw_wall_segment(x: 2, y: 1, dir: get_direction)
-    @room << draw_wall_segment(x: 3, y: 1, dir: get_direction)
-    @room
+    room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
+    room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
+    room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
+    room << draw_wall_segment(x: 1, y: 1, dir: get_direction)
+    room << draw_wall_segment(x: 2, y: 1, dir: get_direction)
+    room << draw_wall_segment(x: 3, y: 1, dir: get_direction)
+    room
   end
 
   # function to draw wall segments, pass in the x, y coordinates, and the direction to draw the segment
@@ -273,7 +267,6 @@ class Game
     @tile_y ||= 0
 
     @cloudy_maze << draw_inner_walls
-    # tile_path = "sprites/tile-#{args.state.tile_x}-#{args.state.tile_y}.png"
     @maze_is_ready = :true
   end
 
@@ -308,7 +301,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.2,
+      gain: 0.15,
       pitch: 1.0,
       paused: true,
       looping: true
