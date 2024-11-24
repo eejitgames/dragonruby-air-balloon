@@ -152,14 +152,27 @@ class Game
   def draw_inner_walls
     @wall_seed = @room_number
     room = []
+    x_values = []
+    y_values = []
 
+    # Generate x values
+    (1..40).each do |i|
+      x_values << i unless (i % 4 == 0) # Skip every 4th value
+    end
+
+    # Generate y values
+    (1..40).each do |i|
+      y_values << i unless ((i % 6) == 3 || (i % 6) == 0) # Skip 3 and multiples of 6
+    end
+
+    # Create x, y pairs
     # TODO: skip drawing if outside the visible area
-    room << draw_wall_segment(x: 1, y: 2, dir: get_direction)
-    room << draw_wall_segment(x: 2, y: 2, dir: get_direction)
-    room << draw_wall_segment(x: 3, y: 2, dir: get_direction)
-    room << draw_wall_segment(x: 1, y: 1, dir: get_direction)
-    room << draw_wall_segment(x: 2, y: 1, dir: get_direction)
-    room << draw_wall_segment(x: 3, y: 1, dir: get_direction)
+    pairs = []
+    x_values.each do |x|
+      y_values.each do |y|
+        room << draw_wall_segment(x: x, y: y, dir: get_direction)
+      end
+    end
     room
   end
 
