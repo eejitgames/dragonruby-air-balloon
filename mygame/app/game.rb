@@ -20,12 +20,12 @@ class Game
 
   def tick_title_scene
     outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
-    create_cloud_maze
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
       audio[:music].paused = false
       audio[:wind].paused = false
+      create_cloud_maze
     end
   end
 
@@ -73,6 +73,15 @@ class Game
     @camera.x = @player.x - @camera.offset_x
     @camera.y = @player.y - @camera.offset_y
 
+    # Calc cloud walls, update their coors wrt camera
+    camera_x = x_to_screen(@camera.x)
+    camera_y = y_to_screen(@camera.y)
+
+    @cloudy_maze.each do |cloud|
+      cloud.x -= camera_x
+      cloud.y -= camera_y
+    end
+
     # Scroll clouds
     @bg_x -= 0.2
     @clock += 1
@@ -87,7 +96,7 @@ class Game
     # draw_debug_grid
 
     # Draw the maze each frame
-    @render_items << draw_inner_walls
+    @render_items << @cloudy_maze
 
     draw_player
 
