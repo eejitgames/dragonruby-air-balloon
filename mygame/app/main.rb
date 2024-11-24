@@ -1,4 +1,5 @@
-require "app/game.rb"
+require_relative 'game'
+require_relative 'maze'
 
 def boot args
   args.state = nil
