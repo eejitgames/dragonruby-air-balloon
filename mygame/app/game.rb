@@ -22,7 +22,7 @@ class Game
     outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
     create_cloud_maze
 
-    if $gtk.args.inputs.mouse.click && @maze_is_ready
+    if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
       audio[:music].paused = false
       audio[:wind].paused = false
@@ -275,12 +275,7 @@ class Game
   end
 
   def create_cloud_maze
-    return if @maze_is_ready
-    @tile_x ||= 0
-    @tile_y ||= 0
-
     @cloudy_maze << draw_inner_walls
-    @maze_is_ready = :true
   end
 
   def defaults
@@ -291,7 +286,6 @@ class Game
     @current_scene = :tick_title_scene
     @next_scene = nil
     @cloudy_maze = []
-    @maze_is_ready = nil
     @tile_x = nil
     @tile_y = nil
     @screen_height = 720
