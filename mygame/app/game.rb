@@ -52,16 +52,11 @@ class Game
   def input
     return if game_has_lost_focus?
 
-    vector = inputs.directional_vector
-    if vector
-      @vector_x = vector.x * @player.speed
-      @vector_y = vector.y * @player.speed
-      @player_flip = false if @vector_x > 0
-      @player_flip = true if @vector_x < 0
-    else
-      @vector_x = 0
-      @vector_y = 0
-    end
+    @vector_x = (@vector_x + inputs.left_right_perc * @player.speed).clamp(-@player.max_speed, @player.max_speed)
+    @vector_y = (@vector_y + inputs.up_down_perc * @player.speed).clamp(-@player.max_speed, @player.max_speed)
+    @player_flip = false if @vector_x > 0
+    @player_flip = true if @vector_x < 0
+
 =begin
     if inputs.keyboard.key_down.forward_slash
       @room_number = (1023 * rand).to_i
@@ -73,8 +68,12 @@ class Game
     return if game_has_lost_focus?
 
     # Calc Player
+    @player.y += @player.rising
     @player.x = (@player.x + @vector_x).cap_min_max(0, 1)
     @player.y = (@player.y + @vector_y).cap_min_max(0, 1)
+    @vector_x *= @player.damping
+    @vector_y *= @player.damping
+
 
     # Calc Camera
     @camera.x = @player.x - @camera.offset_x
@@ -299,7 +298,10 @@ class Game
     @player = {
       x: 0.5,
       y: 0.15,
-      speed: 0.003,
+      speed: 0.0002,
+      rising: 0.0003,
+      damping: 0.95,
+      max_speed: 0.007,
     }
     audio[:music] = {
       input: "sounds/InGameTheme20secGJ.ogg",
