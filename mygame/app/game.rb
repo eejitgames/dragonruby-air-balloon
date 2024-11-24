@@ -80,6 +80,8 @@ class Game
     @camera.x = @player.x - @camera.offset_x
     @camera.y = @player.y - @camera.offset_y
 
+    # Scroll clouds
+    @bg_x -= 0.2
     @clock += 1
   end
 
@@ -116,8 +118,8 @@ class Game
     while tile_x <= tiles_x
       tile_y = 0
       while tile_y <= tiles_y
-        x = (tile_x * @bg_w) - parallax_offset_x
-        y = (tile_y * @bg_h) - parallax_offset_y
+        x = (tile_x * @bg_w) - parallax_offset_x + @bg_x * parallax_multiplier
+        y = (tile_y * @bg_h) - parallax_offset_y + @bg_y * parallax_multiplier
 
         # Add the tile to render items
         @render_items << {
@@ -155,13 +157,6 @@ class Game
 
   # draw inner walls in room, forming a simple maze with wide corridors
   def draw_inner_walls
-    # Find visible area
-    min_x = @camera.x
-    max_x = @camera.x + 1.0
-    min_y = @camera.y
-    max_y = @camera.y + 1.0
-
-
     @wall_seed = @room_number
     @room = []
 
@@ -332,8 +327,8 @@ class Game
 
     # Background
     @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
-    @bg_y = -@screen_height * @camera.offset_y
-    @bg_x = -@screen_width * @camera.offset_x
+    @bg_y = 0
+    @bg_x = 0
     @bg_parallax = 0.5
 
     @defaults_set = :true
