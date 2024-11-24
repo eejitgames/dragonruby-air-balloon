@@ -77,7 +77,7 @@ class Game
     camera_x = x_to_screen(@camera.x)
     camera_y = y_to_screen(@camera.y)
 
-    @cloudy_maze.each do |cloud|
+    @cloudy_maze.map do |key, cloud|
       cloud.x -= camera_x
       cloud.y -= camera_y
     end
