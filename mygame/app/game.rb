@@ -20,12 +20,12 @@ class Game
 
   def tick_title_scene
     outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
+    create_cloud_maze
 
-    if $gtk.args.inputs.mouse.click
+    if $gtk.args.inputs.mouse.click && @maze_is_ready
       @next_scene = :tick_game_scene
       audio[:music].paused = false
       audio[:wind].paused = false
-      create_cloud_maze
     end
   end
 
@@ -68,19 +68,13 @@ class Game
     @vector_x *= @player.damping
     @vector_y *= @player.damping
 
+    # Calc Wind
+    new_wind_gain = Math.sqrt(@vector_x * @vector_x + @vector_y * @vector_y) * 500.0
+    audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, 0.08)
 
     # Calc Camera
     @camera.x = @player.x - @camera.offset_x
     @camera.y = @player.y - @camera.offset_y
-
-    # Calc cloud walls, update their coors wrt camera
-    camera_x = x_to_screen(@camera.x)
-    camera_y = y_to_screen(@camera.y)
-
-    @cloudy_maze.map do |key, cloud|
-      cloud.x -= camera_x
-      cloud.y -= camera_y
-    end
 
     # Scroll clouds
     @bg_x -= 0.2
@@ -96,7 +90,7 @@ class Game
     # draw_debug_grid
 
     # Draw the maze each frame
-    @render_items << @cloudy_maze
+    @render_items << draw_inner_walls
 
     draw_player
 
@@ -284,7 +278,12 @@ class Game
   end
 
   def create_cloud_maze
+    return if @maze_is_ready
+    @tile_x ||= 0
+    @tile_y ||= 0
+
     @cloudy_maze << draw_inner_walls
+    @maze_is_ready = :true
   end
 
   def defaults
@@ -295,6 +294,7 @@ class Game
     @current_scene = :tick_title_scene
     @next_scene = nil
     @cloudy_maze = []
+    @maze_is_ready = nil
     @tile_x = nil
     @tile_y = nil
     @screen_height = 720
@@ -327,7 +327,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 1.2,
+      gain: 0.0,
       pitch: 1.0,
       paused: true,
       looping: true

@@ -1,0 +1,86 @@
+class Maze
+  class RowState
+    def initialize(starting_set=0)
+      @cells_in_set = {}
+      @set_for_cell = []
+      @next_set = starting_set
+    end
+
+    def record(set, cell)
+      @set_for_cell[cell.column] = set
+
+      @cells_in_set[set] = [] unless @cells_in_set[set]
+      @cells_in_set[set].push cell
+    end
+
+    def set_for(cell)
+      unless @set_for_cell[cell.column]
+        record(@next_set, cell)
+        @next_set += 1
+      end
+
+      @set_for_cell[cell.column]
+    end
+
+    def merge(winner, loser)
+      @cells_in_set[loser].each do |cell|
+        @set_for_cell[cell[:column]] = winner
+        @cells_in_set[winner].push cell
+      end
+
+      @cells_in_set.delete(loser)
+    end
+
+    def next
+      RowState.new(@next_set)
+    end
+
+    def each_set
+      @cells_in_set.each { |set, cells| yield set, cells }
+      self
+    end
+  end
+
+  def self.link_cell(cell, other_cell, bidi=true)
+    cell[:links] ||= {}
+    other_cell[:links] ||= {}
+    cell[:links][other_cell] = true
+    other_cell[:links][cell] = true if bidi
+  end
+
+  def self.on(grid)
+    row_state = RowState.new
+
+    grid.each do |row|
+      row.each do |cell|
+        next unless cell[:west]
+
+        set = row_state.set_for(cell)
+        prior_set = row_state.set_for(cell[:west])
+
+        should_link = set != prior_set &&
+          (cell[:south].nil? || rand(2) == 0)
+
+        if should_link
+          link_cell(cell, cell[:west])
+          row_state.merge(prior_set, set)
+        end
+      end
+
+      if row[0][:south]
+        next_row = row_state.next
+
+        row_state.each_set do |set, list|
+          list.shuffle.each_with_index do |cell, index|
+            if index == 0 || rand(3) == 0
+              link_cell(cell, cell[:south])
+              next_row.record(row_state.set_for(cell), cell[:south])
+            end
+          end
+        end
+
+        row_state = next_row
+      end
+    end
+  end
+end
