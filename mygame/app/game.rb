@@ -25,6 +25,7 @@ class Game
     if $gtk.args.inputs.mouse.click && @maze_is_ready
       @next_scene = :tick_game_scene
       audio[:music].paused = false
+      audio[:wind].paused = false
     end
   end
 
@@ -36,6 +37,7 @@ class Game
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_over_scene
       audio[:music].paused = true
+      audio[:wind].paused = true
     end
   end
 
@@ -83,14 +85,53 @@ class Game
 
   def render
     @render_items = []
-    @render_items << { x: 0, y: 0, w: 1280, h: 720, path: 'sprites/cloudy_background.png' }
+
+    # Draw background
+    draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png')
+
     # draw_debug_grid
 
     # Draw the maze each frame
     @render_items << draw_inner_walls
 
     draw_player
+
+    # Draw foreground
+    draw_parallax_layer_tiles(@bg_parallax * 3.0, 'sprites/cloudy_foreground.png', a: 32, blendmode_enum: 2)
+
     outputs.primitives << @render_items
+  end
+
+  def draw_parallax_layer_tiles(parallax_multiplier, image_path, render_options = {})
+    # Calculate the parallax offset
+    parallax_offset_x = (@player.x * @screen_width * parallax_multiplier) % @bg_w
+    parallax_offset_y = (@player.y * @screen_height * parallax_multiplier) % @bg_h
+
+    # Determine how many tiles are needed to cover the screen
+    tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
+    tiles_y = (@screen_height / @bg_h.to_f).ceil + 1
+
+    # Draw the tiles
+    tile_x = 0
+    while tile_x <= tiles_x
+      tile_y = 0
+      while tile_y <= tiles_y
+        x = (tile_x * @bg_w) - parallax_offset_x
+        y = (tile_y * @bg_h) - parallax_offset_y
+
+        # Add the tile to render items
+        @render_items << {
+          x: x,
+          y: y,
+          w: @bg_w,
+          h: @bg_h,
+          path: image_path
+        }.merge(render_options)
+
+        tile_y += 1
+      end
+      tile_x += 1
+    end
   end
 
   def draw_debug_grid
@@ -222,9 +263,11 @@ class Game
       if focus
         # putz "lost focus"
         audio[:music].paused = true
+        audio[:wind].paused = true
       else
         # putz "gained focus"
         audio[:music].paused = false
+        audio[:wind].paused = false
       end
     end
     @lost_focus = focus
@@ -273,9 +316,25 @@ class Game
       paused: true,
       looping: true
     }
+    audio[:wind] = {
+      input: "sounds/Wind.ogg",
+      x: 0.0,
+      y: 0.0,
+      z: 0.0,
+      gain: 1.2,
+      pitch: 1.0,
+      paused: true,
+      looping: true
+    }
 
     # Camera
     @camera ||= { x: 0.0, y: 0.0, offset_x: 0.5, offset_y: 0.5 }
+
+    # Background
+    @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
+    @bg_y = -@screen_height * @camera.offset_y
+    @bg_x = -@screen_width * @camera.offset_x
+    @bg_parallax = 0.5
 
     @defaults_set = :true
   end
