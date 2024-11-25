@@ -87,8 +87,6 @@ class Game
     # Draw background
     draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png')
 
-    # draw_debug_grid
-
     # Draw the maze each frame
     draw_maze
     draw_player
@@ -128,25 +126,6 @@ class Game
         tile_y += 1
       end
       tile_x += 1
-    end
-  end
-
-  def draw_debug_grid
-    3.times do |y|
-      4.times do |x|
-        @render_items << {
-          x: x * @section_width + @section_width/2,
-          y: y * @section_height + @section_height/2,
-          w: @section_width - 2,
-          h: @section_height - 2,
-          path: :pixel,
-          r: 200,
-          g: 200,
-          b: 200,
-          anchor_x: 0.5,
-          anchor_y: 0.5
-        }
-      end
     end
   end
 
@@ -344,7 +323,7 @@ class Game
     return if @defaults_set
 
     # Generate maze
-    @cell_size = 600
+    @cell_size = 400
 
     @lost_focus = true
     @clock = 0
@@ -354,8 +333,6 @@ class Game
     @tile_y = nil
     @screen_height = 720
     @screen_width = 1280
-    @section_width = 320
-    @section_height = 240
     @wall_thickness = 48
     @vector_x = 0
     @vector_y = 0
@@ -374,7 +351,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.15,
+      gain: 0.1,
       pitch: 1.0,
       paused: true,
       looping: true
@@ -390,8 +367,8 @@ class Game
       looping: true
     }
 
-    @maze_width = 10
-    @maze_height = 20
+    @maze_width = 12
+    @maze_height = 18
     create_maze
 
     # Camera
