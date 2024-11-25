@@ -244,11 +244,12 @@ class Game
 
     minimap_cell_size = 10
 
+    # Draw translucent background
     @render_items << { x: 0, y: 0, w: @maze_width * minimap_cell_size, h: @maze_height * minimap_cell_size, r: 0, g: 0, b: 0, a: 64, primitive_marker: :solid }
+   
     #[Debug] draw maze as a minimap
     @maze.each do |row|
       row.each do |cell|
-
         x1 = cell[:col] * minimap_cell_size
         y1 = cell[:row] * minimap_cell_size
         x2 = (cell[:col] + 1) * minimap_cell_size
