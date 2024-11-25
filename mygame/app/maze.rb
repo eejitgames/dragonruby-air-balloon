@@ -48,7 +48,7 @@ class Maze
     other_cell[:links][cell] = true if bidi
   end
 
-  def self.on grid, upward_bias = 0.75
+  def self.on grid, upward_bias = 0.0, hole_chance = 0.4
     row_state = RowState.new
 
     grid.each do |row|
@@ -79,6 +79,14 @@ class Maze
           end
         end
 
+
+        # Add additional links to south cells based on the specified chance
+        row.each do |cell|
+          if cell[:south] && rand < hole_chance
+            link_cell(cell, cell[:south])
+            next_row.record(row_state.set_for(cell), cell[:south])
+          end
+        end
         row_state = next_row
       end
     end
