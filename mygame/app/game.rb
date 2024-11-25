@@ -251,6 +251,39 @@ class Game
         @render_items << { x: x1, y: y1, x2: x1, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
         @render_items << { x: x2, y: y1, x2: x2, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:east]
         @render_items << { x: x1, y: y2, x2: x2, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
+
+
+        # Debug- draw entire maze as a minimap
+        minimap_cell_size = 10
+        x1 = cell[:col] * minimap_cell_size
+        y1 = cell[:row] * minimap_cell_size
+        x2 = (cell[:col] + 1) * minimap_cell_size
+        y2 = (cell[:row] + 1) * minimap_cell_size
+        @render_items << { x: x1, y: y1, x2: x2, y2: y1, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:north]
+        @render_items << { x: x1, y: y1, x2: x1, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
+        @render_items << { x: x2, y: y1, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:east]
+        @render_items << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
+
+        # Normalize player's position
+        normalized_player_x = @player[:x] * @screen_width
+        normalized_player_y = @player[:y] * @screen_height
+
+        # Calculate player's position in the minimap space
+        minimap_player_x = normalized_player_x / @cell_size * minimap_cell_size
+        minimap_player_y = normalized_player_y / @cell_size * minimap_cell_size
+
+        @render_items << {
+          x: minimap_player_x,
+          y: minimap_player_y,
+          w: 5,
+          h: 5,
+          r: 255,
+          g: 0,
+          b: 0,
+          anchor_x: 0.5,
+          anchor_y: 0.5,
+          primitive_marker: :solid
+        }
       end
     end
   end
