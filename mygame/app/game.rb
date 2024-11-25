@@ -102,11 +102,11 @@ class Game
 
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, render_options = {})
     # Calculate the parallax offset
-    parallax_offset_x = (@player.x * @screen_width * parallax_multiplier) % @bg_w
-    parallax_offset_y = (@player.y * @screen_height * parallax_multiplier) % @bg_h
+    parallax_offset_x = (@player.x * @screen_width * parallax_multiplier + @bg_x) % @bg_w
+    parallax_offset_y = (@player.y * @screen_height * parallax_multiplier + @bg_y) % @bg_h
 
     # Determine how many tiles are needed to cover the screen
-    tiles_x = (@screen_width / @bg_w.to_f).ceil + 2
+    tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
     tiles_y = (@screen_height / @bg_h.to_f).ceil + 1
 
     # Draw the tiles
@@ -114,8 +114,8 @@ class Game
     while tile_x <= tiles_x
       tile_y = 0
       while tile_y <= tiles_y
-        x = (tile_x * @bg_w) - parallax_offset_x + @bg_x * parallax_multiplier
-        y = (tile_y * @bg_h) - parallax_offset_y + @bg_y * parallax_multiplier
+        x = (tile_x * @bg_w) - parallax_offset_x
+        y = (tile_y * @bg_h) - parallax_offset_y
 
         # Add the tile to render items
         @render_items << {
@@ -184,7 +184,6 @@ class Game
         colliders
       end
     end
-
 
     @maze_colliders_quad_tree = GTK::Geometry.quad_tree_create maze_colliders
   end
