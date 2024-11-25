@@ -107,13 +107,13 @@ class Game
     parallax_offset_y = (@player.y * @screen_height * parallax_multiplier) % @bg_h
 
     # Determine how many tiles are needed to cover the screen
-    tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
+    tiles_x = (@screen_width / @bg_w.to_f).ceil + 2
     tiles_y = (@screen_height / @bg_h.to_f).ceil + 1
 
     # Draw the tiles
-    tile_x = -1
+    tile_x = 0
     while tile_x <= tiles_x
-      tile_y = -1
+      tile_y = 0
       while tile_y <= tiles_y
         x = (tile_x * @bg_w) - parallax_offset_x + @bg_x * parallax_multiplier
         y = (tile_y * @bg_h) - parallax_offset_y + @bg_y * parallax_multiplier
