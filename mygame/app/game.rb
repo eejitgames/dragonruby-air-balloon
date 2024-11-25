@@ -242,10 +242,13 @@ class Game
     camera_x = @camera.x * @screen_width
     camera_y = @camera.y * @screen_height
 
+    minimap_cell_size = 10
+
+    @render_items << { x: 0, y: 0, w: @maze_width * minimap_cell_size, h: @maze_height * minimap_cell_size, r: 0, g: 0, b: 0, a: 64, primitive_marker: :solid }
     #[Debug] draw maze as a minimap
     @maze.each do |row|
       row.each do |cell|
-        minimap_cell_size = 10
+
         x1 = cell[:col] * minimap_cell_size
         y1 = cell[:row] * minimap_cell_size
         x2 = (cell[:col] + 1) * minimap_cell_size
@@ -353,8 +356,8 @@ class Game
     @render_items << {
       x: x_to_screen(@player.x - @camera.x),
       y: y_to_screen(@player.y - @camera.y),
-      w: 120,
-      h: 176,
+      w: @player[:w],
+      h: @player[:h],
       anchor_x: 0.5,
       anchor_y: 0.5,
       path: @player_sprite_path,
@@ -398,7 +401,7 @@ class Game
   end
 
   def create_maze
-    @maze = Maze.prepare_grid(40, 20)
+    @maze = Maze.prepare_grid(@maze_height, @maze_width)
     Maze.configure_cells(@maze)
     Maze.on(@maze)
 
@@ -486,6 +489,8 @@ class Game
       looping: true
     }
 
+    @maze_width = 20
+    @maze_height = 40
     create_maze
 
     # Camera
