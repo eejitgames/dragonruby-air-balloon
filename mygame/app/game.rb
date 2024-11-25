@@ -90,8 +90,9 @@ class Game
     # draw_debug_grid
 
     # Draw the maze each frame
-    @render_items << draw_inner_walls
+    #@render_items << draw_inner_walls
 
+    draw_maze
     draw_player
 
     # Draw foreground
@@ -235,6 +236,25 @@ class Game
     end
   end
 
+  def draw_maze
+    camera_x = @camera.x * @screen_width
+    camera_y = @camera.y * @screen_height
+
+    @maze.each do |row|
+      row.each do |cell|
+        x1 = cell[:col] * @cell_size - camera_x
+        y1 = cell[:row] * @cell_size - camera_y
+        x2 = (cell[:col] + 1) * @cell_size - camera_x
+        y2 = (cell[:row] + 1) * @cell_size - camera_y
+
+        @render_items << { x: x1, y: y1, x2: x2, y2: y1, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:north]
+        @render_items << { x: x1, y: y1, x2: x1, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
+        @render_items << { x: x2, y: y1, x2: x2, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:east]
+        @render_items << { x: x1, y: y2, x2: x2, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
+      end
+    end
+  end
+
   def draw_player
     player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: 10, repeat: true)
     @player_sprite_path = "sprites/balloon_#{player_sprite_index + 1}.png"
@@ -288,6 +308,15 @@ class Game
 
   def defaults
     return if @defaults_set
+
+    # Generate maze
+    @cell_size = 600
+
+    @maze = Maze.prepare_grid(40, 20)
+    Maze.configure_cells(@maze)
+    Maze.on(@maze)
+
+
     @lost_focus = true
     @clock = 0
     @room_number = (512 * rand).to_i # x0153
