@@ -157,6 +157,7 @@ class Game
     Maze.on(@maze)
 
     collider = { r: 32, g: 255, b: 32, a: 32, primitive_marker: :solid }
+
     # Create collision rects
     maze_colliders = @maze.flat_map do |row|
       row.flat_map do |cell|
@@ -177,12 +178,13 @@ class Game
           colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
         end
         unless cell[:links].key? cell[:south]
-          colliders << { x: x1, y: y2 - @wall_thickness, w: @cell_size, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1 - @wall_thickness, y: y2 - @wall_thickness, w: @cell_size + @wall_thickness, h: @wall_thickness }.merge!(collider)
         end
 
         colliders
       end
     end
+
 
     @maze_colliders_quad_tree = GTK::Geometry.quad_tree_create maze_colliders
   end
