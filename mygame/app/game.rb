@@ -89,12 +89,13 @@ class Game
 
     # draw_debug_grid
 
-    # Draw the maze each frame
     draw_maze
     draw_player
 
     # Draw foreground
     draw_parallax_layer_tiles(@bg_parallax * 3.0, 'sprites/cloudy_foreground.png', a: 32, blendmode_enum: 2)
+
+    draw_minimap
 
     outputs.primitives << @render_items
   end
@@ -150,49 +151,45 @@ class Game
     end
   end
 
+  def create_maze
+    @maze = Maze.prepare_grid(@maze_height, @maze_width)
+    Maze.configure_cells(@maze)
+    Maze.on(@maze)
+
+    collider = { r: 32, g: 255, b: 32, a: 32, primitive_marker: :solid }
+    # Create collision rects
+    maze_colliders = @maze.flat_map do |row|
+      row.flat_map do |cell|
+        x1 = cell[:col] * @cell_size
+        y1 = cell[:row] * @cell_size
+        x2 = (cell[:col] + 1) * @cell_size
+        y2 = (cell[:row] + 1) * @cell_size
+
+        colliders = []
+
+        unless cell[:north]
+          colliders << { x: x1, y: y1, w: @cell_size, h: @wall_thickness }.merge!(collider)
+        end
+        unless cell[:west]
+          colliders << { x: x1, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
+        end
+        unless cell[:links].key? cell[:east]
+          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
+        end
+        unless cell[:links].key? cell[:south]
+          colliders << { x: x1, y: y2 - @wall_thickness, w: @cell_size, h: @wall_thickness }.merge!(collider)
+        end
+
+        colliders
+      end
+    end
+
+    @maze_colliders_quad_tree = GTK::Geometry.quad_tree_create maze_colliders
+  end
+
   def draw_maze
     camera_x = @camera.x * @screen_width
     camera_y = @camera.y * @screen_height
-
-    minimap_cell_size = 10
-
-    # Draw translucent background
-    @render_items << { x: 0, y: 0, w: @maze_width * minimap_cell_size, h: @maze_height * minimap_cell_size, r: 0, g: 0, b: 0, a: 64, primitive_marker: :solid }
-
-    #[Debug] draw maze as a minimap
-    @maze.each do |row|
-      row.each do |cell|
-        x1 = cell[:col] * minimap_cell_size
-        y1 = cell[:row] * minimap_cell_size
-        x2 = (cell[:col] + 1) * minimap_cell_size
-        y2 = (cell[:row] + 1) * minimap_cell_size
-        @render_items << { x: x1, y: y1, x2: x2, y2: y1, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:north]
-        @render_items << { x: x1, y: y1, x2: x1, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
-        @render_items << { x: x2, y: y1, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:east]
-        @render_items << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
-
-        # Normalize player's position
-        normalized_player_x = @player[:x] * @screen_width
-        normalized_player_y = @player[:y] * @screen_height
-
-        # Calculate player's position in the minimap space
-        minimap_player_x = normalized_player_x / @cell_size * minimap_cell_size
-        minimap_player_y = normalized_player_y / @cell_size * minimap_cell_size
-
-        @render_items << {
-          x: minimap_player_x,
-          y: minimap_player_y,
-          w: 5,
-          h: 5,
-          r: 255,
-          g: 0,
-          b: 0,
-          anchor_x: 0.5,
-          anchor_y: 0.5,
-          primitive_marker: :solid
-        }
-      end
-    end
 
     # Draw colliders.  Quad tree used for frustum culling
     viewport = {
@@ -208,6 +205,63 @@ class Game
         y: collision[:y] - camera_y
       )
     end
+  end
+
+  def create_minimap
+    outputs[:minimap].w = @minimap_width
+    outputs[:minimap].h = @minimap_height
+
+    # Draw translucent background
+    outputs[:minimap].primitives << {
+      x: 0,
+      y: 0,
+      w: @maze_width * @minimap_cell_size,
+      h: @maze_height * @minimap_cell_size,
+      r: 0,
+      g: 0,
+      b: 0,
+      a: 96,
+      primitive_marker: :solid
+    }
+
+    # [Debug] draw maze as a minimap
+    @maze.each do |row|
+      row.each do |cell|
+        x1 = cell[:col] * @minimap_cell_size
+        y1 = cell[:row] * @minimap_cell_size
+        x2 = (cell[:col] + 1) * @minimap_cell_size
+        y2 = (cell[:row] + 1) * @minimap_cell_size
+        outputs[:minimap].primitives << { x: x1, y: y1, x2: x2, y2: y1, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:north]
+        outputs[:minimap].primitives << { x: x1, y: y1, x2: x1, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
+        outputs[:minimap].primitives << { x: x2, y: y1, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:east]
+        outputs[:minimap].primitives << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
+      end
+    end
+  end
+
+  def draw_minimap
+    @render_items << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, path: :minimap, primitive_marker: :sprite }
+
+    # Normalize player's position
+    normalized_player_x = @player[:x] * @screen_width
+    normalized_player_y = @player[:y] * @screen_height
+
+    # Calculate player's position in the minimap space
+    minimap_player_x = normalized_player_x / @cell_size * @minimap_cell_size
+    minimap_player_y = normalized_player_y / @cell_size * @minimap_cell_size
+
+    @render_items << {
+      x: minimap_player_x,
+      y: minimap_player_y,
+      w: 5,
+      h: 5,
+      r: 255,
+      g: 0,
+      b: 0,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      primitive_marker: :solid
+    }
   end
 
   def handle_collision
@@ -304,47 +358,8 @@ class Game
     @lost_focus = focus
   end
 
-  def create_maze
-    @maze = Maze.prepare_grid(@maze_height, @maze_width)
-    Maze.configure_cells(@maze)
-    Maze.on(@maze)
-
-    collider = { r: 32, g: 255, b: 32, a: 32, primitive_marker: :solid }
-    # Create collision rects
-    @maze_colliders = @maze.flat_map do |row|
-      row.flat_map do |cell|
-        x1 = cell[:col] * @cell_size
-        y1 = cell[:row] * @cell_size
-        x2 = (cell[:col] + 1) * @cell_size
-        y2 = (cell[:row] + 1) * @cell_size
-
-        colliders = []
-
-        unless cell[:north]
-          colliders << { x: x1, y: y1, w: @cell_size, h: @wall_thickness }.merge!(collider)
-        end
-        unless cell[:west]
-          colliders << { x: x1, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
-        end
-        unless cell[:links].key? cell[:east]
-          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
-        end
-        unless cell[:links].key? cell[:south]
-          colliders << { x: x1, y: y2 - @wall_thickness, w: @cell_size, h: @wall_thickness }.merge!(collider)
-        end
-
-        colliders
-      end
-    end
-
-    @maze_colliders_quad_tree = GTK::Geometry.quad_tree_create @maze_colliders
-  end
-
   def defaults
     return if @defaults_set
-
-    # Generate maze
-    @cell_size = 600
 
     @lost_focus = true
     @clock = 0
@@ -390,14 +405,22 @@ class Game
       looping: true
     }
 
+    # Create Maze
+    @cell_size = 600
     @maze_width = 10
     @maze_height = 20
     create_maze
 
-    # Camera
+    # Create Minimap
+    @minimap_cell_size = 10
+    @minimap_width = @maze_width * @minimap_cell_size
+    @minimap_height = @maze_height * @minimap_cell_size
+    create_minimap
+
+    # Create Camera
     @camera ||= { x: 0.0, y: 0.0, offset_x: 0.5, offset_y: 0.5 }
 
-    # Background
+    # Create Background
     @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
     @bg_y = 0
     @bg_x = 0
