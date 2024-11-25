@@ -8,7 +8,6 @@ class Game
 
     # outputs.debug.watch state
     # outputs.watch "#{$gtk.current_framerate} FPS"
-    outputs.debug.watch "room number: #{@room_number}"
     outputs.debug.watch "tick count: #{@clock}"
 
     # has there been a scene change ?
@@ -20,9 +19,8 @@ class Game
 
   def tick_title_scene
     outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
-    create_cloud_maze
 
-    if $gtk.args.inputs.mouse.click && @maze_is_ready
+    if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
       audio[:music].paused = false
       audio[:wind].paused = false
@@ -92,8 +90,6 @@ class Game
     # draw_debug_grid
 
     # Draw the maze each frame
-    #@render_items << draw_inner_walls
-
     draw_maze
     draw_player
 
@@ -154,90 +150,6 @@ class Game
     end
   end
 
-  # draw inner walls in room, forming a simple maze with wide corridors
-  def draw_inner_walls
-    @wall_seed = @room_number
-    room = []
-    x_values = []
-    y_values = []
-
-    # Generate x values
-    (1..40).each do |i|
-      x_values << i unless (i % 4 == 0) # Skip every 4th value
-    end
-
-    # Generate y values
-    (1..40).each do |i|
-      y_values << i unless ((i % 6) == 3 || (i % 6) == 0) # Skip 3 and multiples of 6
-    end
-
-    # Create x, y pairs
-    # TODO: skip drawing if outside the visible area
-    pairs = []
-    x_values.each do |x|
-      y_values.each do |y|
-        room << draw_wall_segment(x: x, y: y, dir: get_direction)
-      end
-    end
-    room
-  end
-
-  # function to draw wall segments, pass in the x, y coordinates, and the direction to draw the segment
-  def draw_wall_segment(x:, y:, dir:)
-    camera_x = x_to_screen(@camera.x)
-    camera_y = y_to_screen(@camera.y)
-
-    case dir
-    when :N
-      xc = (x * @section_width - @wall_thickness / 2).to_i
-      yc = (y * @section_height - @wall_thickness + @wall_thickness / 2).to_i
-      wc = @wall_thickness
-      hc = @section_height + @wall_thickness
-      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
-    when :S
-      xc = (x * @section_width - @wall_thickness / 2).to_i
-      yc = ((y - 1) * @section_height - @wall_thickness + @wall_thickness / 2).to_i
-      wc = @wall_thickness
-      hc = @section_height + @wall_thickness
-      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/vertical_cloud_wall.png' }
-    when :E
-      xc = (x * @section_width - @wall_thickness / 2).to_i
-      yc = (y * @section_height - @wall_thickness / 2).to_i
-      wc = @section_width + @wall_thickness
-      hc = @wall_thickness
-      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
-    when :W
-      xc = ((x - 1) * @section_width - @wall_thickness / 2).to_i
-      yc = (y * @section_height - @wall_thickness / 2).to_i
-      wc = @section_width + @wall_thickness
-      hc = @wall_thickness
-      { x: xc - camera_x, y: yc - camera_y, w: wc, h: hc, path: 'sprites/horizontal_cloud_wall.png' }
-    end
-  end
-
-  def get_direction
-    n1 = 0x7
-    n2 = 0x3153
-    r1 = (@wall_seed * n1) & 0xFFFF
-    r2 = (r1 + n2) & 0xFFFF
-    r3 = (r2 * n1) & 0xFFFF
-    result = (r3 + n2) & 0xFFFF
-    @wall_seed = result
-    high_8_bits = (result >> 8) & 0xFF
-    low_2_bits = high_8_bits & 0x03
-
-    case low_2_bits
-    when 0
-      :N
-    when 1
-      :S
-    when 2
-      :E
-    when 3
-      :W
-    end
-  end
-
   def draw_maze
     camera_x = @camera.x * @screen_width
     camera_y = @camera.y * @screen_height
@@ -246,7 +158,7 @@ class Game
 
     # Draw translucent background
     @render_items << { x: 0, y: 0, w: @maze_width * minimap_cell_size, h: @maze_height * minimap_cell_size, r: 0, g: 0, b: 0, a: 64, primitive_marker: :solid }
-   
+
     #[Debug] draw maze as a minimap
     @maze.each do |row|
       row.each do |cell|
@@ -392,15 +304,6 @@ class Game
     @lost_focus = focus
   end
 
-  def create_cloud_maze
-    return if @maze_is_ready
-    @tile_x ||= 0
-    @tile_y ||= 0
-
-    @cloudy_maze << draw_inner_walls
-    @maze_is_ready = :true
-  end
-
   def create_maze
     @maze = Maze.prepare_grid(@maze_height, @maze_width)
     Maze.configure_cells(@maze)
@@ -445,11 +348,8 @@ class Game
 
     @lost_focus = true
     @clock = 0
-    @room_number = (512 * rand).to_i # x0153
     @current_scene = :tick_title_scene
     @next_scene = nil
-    @cloudy_maze = []
-    @maze_is_ready = nil
     @tile_x = nil
     @tile_y = nil
     @screen_height = 720
@@ -467,7 +367,7 @@ class Game
       speed: 0.0002,
       rising: 0.0003,
       damping: 0.95,
-      max_speed: 0.007,
+      max_speed: 0.01,
     }
     audio[:music] = {
       input: "sounds/InGameTheme20secGJ.ogg",
@@ -490,8 +390,8 @@ class Game
       looping: true
     }
 
-    @maze_width = 20
-    @maze_height = 40
+    @maze_width = 10
+    @maze_height = 20
     create_maze
 
     # Camera
