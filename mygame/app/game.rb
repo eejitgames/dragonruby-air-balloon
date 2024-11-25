@@ -68,6 +68,8 @@ class Game
     @vector_x *= @player.damping
     @vector_y *= @player.damping
 
+    handle_collision
+
     # Calc Wind
     new_wind_gain = Math.sqrt(@vector_x * @vector_x + @vector_y * @vector_y) * 500.0
     audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, 0.08)
@@ -240,20 +242,9 @@ class Game
     camera_x = @camera.x * @screen_width
     camera_y = @camera.y * @screen_height
 
+    #[Debug] draw maze as a minimap
     @maze.each do |row|
       row.each do |cell|
-        x1 = cell[:col] * @cell_size - camera_x
-        y1 = cell[:row] * @cell_size - camera_y
-        x2 = (cell[:col] + 1) * @cell_size - camera_x
-        y2 = (cell[:row] + 1) * @cell_size - camera_y
-
-        @render_items << { x: x1, y: y1, x2: x2, y2: y1, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:north]
-        @render_items << { x: x1, y: y1, x2: x1, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
-        @render_items << { x: x2, y: y1, x2: x2, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:east]
-        @render_items << { x: x1, y: y2, x2: x2, y2: y2, r: 0, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
-
-
-        # Debug- draw entire maze as a minimap
         minimap_cell_size = 10
         x1 = cell[:col] * minimap_cell_size
         y1 = cell[:row] * minimap_cell_size
@@ -285,6 +276,73 @@ class Game
           primitive_marker: :solid
         }
       end
+    end
+
+    # Draw colliders.  Quad tree used for frustum culling
+    viewport = {
+      x: camera_x,
+      y: camera_y,
+      w: @screen_width,
+      h: @screen_height
+    }
+
+    GTK::Geometry.find_all_intersect_rect_quad_tree(viewport, @maze_colliders_quad_tree).each do |collision|
+      @render_items << collision.merge(
+        x: collision[:x] - camera_x,
+        y: collision[:y] - camera_y
+      )
+    end
+  end
+
+  def handle_collision
+    player_bounds = {
+      x: @player[:x] * @screen_width - @player[:w] * 0.5,
+      y: @player[:y] * @screen_height - @player[:h] * 0.5,
+      w: @player[:w],
+      h: @player[:h]
+    }
+
+    GTK::Geometry.find_all_intersect_rect_quad_tree(player_bounds, @maze_colliders_quad_tree).each do |collision|
+      mid_a = { x: player_bounds[:x] + player_bounds[:w] * 0.5, y: player_bounds[:y] + player_bounds[:h] * 0.5 }
+      mid_b = { x: collision[:x] + collision[:w] * 0.5, y: collision[:y] + collision[:h] * 0.5 }
+      e_a = { x: player_bounds[:w] * 0.5, y: player_bounds[:h] * 0.5 }
+      e_b = { x: collision[:w] * 0.5, y: collision[:h] * 0.5 }
+      d = { x: mid_b[:x] - mid_a[:x], y: mid_b[:y] - mid_a[:y] }
+
+      dx = e_a[:x] + e_b[:x] - d[:x].abs
+      next if dx < 0
+
+      dy = e_a[:y] + e_b[:y] - d[:y].abs
+      next if dy < 0
+
+      if dx < dy
+        depth = dx
+        if d[:x] < 0
+          normal = { x: -1.0, y: 0 }
+          # point = { x: mid_a[:x] - e_a[:x], y: mid_a[:y] }
+        else
+          normal = { x: 1.0, y: 0 }
+          # point = { x: mid_a[:x] + e_a[:x], y: mid_a[:y] }
+        end
+      else
+        depth = dy
+        if d[:y] < 0
+          normal = { x: 0, y: -1.0 }
+          # point = { x: mid_a[:x], y: mid_a[:y] - e_a[:y] }
+        else
+          normal = { x: 0, y: 1.0 }
+          # point = { x: mid_a[:x], y: mid_a[:y] + e_a[:y] }
+        end
+      end
+
+      # Resolve the collision
+      @player[:x] -= normal[:x] * depth / @screen_width
+      @player[:y] -= normal[:y] * depth / @screen_height
+
+      # Zero the player's velocity in the direction of the normal
+      dot = @vector_x * normal[:x] + @vector_y * normal[:y]
+      @vector_x -= dot * normal[:x]
+      @vector_y -= dot * normal[:y]
     end
   end
 
@@ -339,16 +397,47 @@ class Game
     @maze_is_ready = :true
   end
 
+  def create_maze
+    @maze = Maze.prepare_grid(40, 20)
+    Maze.configure_cells(@maze)
+    Maze.on(@maze)
+
+    collider = { r: 32, g: 255, b: 32, a: 32, primitive_marker: :solid }
+    # Create collision rects
+    @maze_colliders = @maze.flat_map do |row|
+      row.flat_map do |cell|
+        x1 = cell[:col] * @cell_size
+        y1 = cell[:row] * @cell_size
+        x2 = (cell[:col] + 1) * @cell_size
+        y2 = (cell[:row] + 1) * @cell_size
+
+        colliders = []
+
+        unless cell[:north]
+          colliders << { x: x1, y: y1, w: @cell_size, h: @wall_thickness }.merge!(collider)
+        end
+        unless cell[:west]
+          colliders << { x: x1, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
+        end
+        unless cell[:links].key? cell[:east]
+          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
+        end
+        unless cell[:links].key? cell[:south]
+          colliders << { x: x1, y: y2 - @wall_thickness, w: @cell_size, h: @wall_thickness }.merge!(collider)
+        end
+
+        colliders
+      end
+    end
+
+    @maze_colliders_quad_tree = GTK::Geometry.quad_tree_create @maze_colliders
+  end
+
   def defaults
     return if @defaults_set
 
     # Generate maze
     @cell_size = 600
-
-    @maze = Maze.prepare_grid(40, 20)
-    Maze.configure_cells(@maze)
-    Maze.on(@maze)
-
 
     @lost_focus = true
     @clock = 0
@@ -369,6 +458,8 @@ class Game
     @player = {
       x: 0.5,
       y: 0.15,
+      w: 120,
+      h: 176,
       speed: 0.0002,
       rising: 0.0003,
       damping: 0.95,
@@ -394,6 +485,8 @@ class Game
       paused: true,
       looping: true
     }
+
+    create_maze
 
     # Camera
     @camera ||= { x: 0.0, y: 0.0, offset_x: 0.5, offset_y: 0.5 }
