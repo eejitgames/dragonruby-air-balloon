@@ -150,24 +150,24 @@ class Game
     # Create collision rects
     maze_colliders = @maze.flat_map do |row|
       row.flat_map do |cell|
-        x1 = cell[:col] * @cell_size
-        y1 = cell[:row] * @cell_size
-        x2 = (cell[:col] + 1) * @cell_size
-        y2 = (cell[:row] + 1) * @cell_size
+        x1 = cell[:col] * @maze_cell_w
+        y1 = cell[:row] * @maze_cell_h
+        x2 = (cell[:col] + 1) * @maze_cell_w
+        y2 = (cell[:row] + 1) * @maze_cell_h
 
         colliders = []
 
         unless cell[:north]
-          colliders << { x: x1, y: y1, w: @cell_size, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1, y: y1, w: @maze_cell_w, h: @wall_thickness }.merge!(collider)
         end
         unless cell[:west]
-          colliders << { x: x1, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
+          colliders << { x: x1, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
         end
         unless cell[:links].key? cell[:east]
-          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @cell_size }.merge!(collider)
+          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
         end
         unless cell[:links].key? cell[:south]
-          colliders << { x: x1 - @wall_thickness, y: y2 - @wall_thickness, w: @cell_size + @wall_thickness, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1 - @wall_thickness, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness }.merge!(collider)
         end
 
         colliders
@@ -239,12 +239,12 @@ class Game
     normalized_player_y = @player[:y] * @screen_height
 
     # Calculate player's position in the minimap space
-    minimap_player_x = normalized_player_x / @cell_size * @minimap_cell_size
-    minimap_player_y = normalized_player_y / @cell_size * @minimap_cell_size
+    minimap_player_x = normalized_player_x / @maze_cell_w * @minimap_cell_size
+    minimap_player_y = normalized_player_y / @maze_cell_h * @minimap_cell_size
     
     # Draw the viewport rect into the mask
-    view_rect_x = (@screen_width / (@maze_width * @cell_size)) * @minimap_width
-    view_rect_y = (@screen_height / (@maze_height * @cell_size)) * @minimap_height
+    view_rect_x = (@screen_width / (@maze_width * @maze_cell_w)) * @minimap_width
+    view_rect_y = (@screen_height / (@maze_height * @maze_cell_h)) * @minimap_height
     outputs[:minimap_mask].clear_before_render = false
     outputs[:minimap_mask].solids << {
       x: minimap_player_x,
@@ -470,7 +470,8 @@ class Game
     }
 
     # Create Maze
-    @cell_size = 600
+    @maze_cell_w = 400
+    @maze_cell_h = 600
     @maze_width = 10
     @maze_height = 20
 
