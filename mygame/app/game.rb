@@ -50,10 +50,20 @@ class Game
   def input
     return if game_has_lost_focus?
 
-    @vector_x = (@vector_x + inputs.left_right_perc * @player.speed).clamp(-@player.max_speed, @player.max_speed)
-    @vector_y = (@vector_y + inputs.up_down_perc * @player.speed).clamp(-@player.max_speed, @player.max_speed)
-    @player_flip = false if @vector_x > 0
-    @player_flip = true if @vector_x < 0
+    dx = inputs.left_right_perc
+    dy = inputs.up_down_perc
+
+    # Normalize the input so diagonal movements aren't faster
+    if dx != 0 || dy != 0
+      l = 1.0 / Math.sqrt(dx * dx + dy * dy)
+      dx *= l
+      dy *= l
+    end
+
+    @vector_x = (@vector_x + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+    @vector_y = (@vector_y + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+    @player_flip = false if dx > 0
+    @player_flip = true if dx < 0
   end
 
   def calc
@@ -217,11 +227,14 @@ class Game
         outputs[:minimap].primitives << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
       end
     end
+
+    # Prepare mask
+    outputs[:minimap_mask].w = @minimap_width
+    outputs[:minimap_mask].h = @minimap_height
+    args.render_target(:minimap_mask).clear_before_render
   end
 
   def draw_minimap
-    @render_items << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, path: :minimap, primitive_marker: :sprite }
-
     # Normalize player's position
     normalized_player_x = @player[:x] * @screen_width
     normalized_player_y = @player[:y] * @screen_height
@@ -229,6 +242,11 @@ class Game
     # Calculate player's position in the minimap space
     minimap_player_x = normalized_player_x / @cell_size * @minimap_cell_size
     minimap_player_y = normalized_player_y / @cell_size * @minimap_cell_size
+
+    outputs[:minimap_mask].solids << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, r: 0, g: 0, b: 0, primitive_marker: :solid }
+    outputs[:minimap_mask].sprites << { x: minimap_player_x, y: minimap_player_y, w: 24, h: 24, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/mask.png', blendmode_enum: 2, primitive_marker: :sprite }
+
+    @render_items << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, path: :minimap, primitive_marker: :sprite }
 
     @render_items << {
       x: minimap_player_x,
@@ -266,33 +284,36 @@ class Game
       next if dy < 0
 
       if dx < dy
-        depth = dx
         if d[:x] < 0
-          normal = { x: -1.0, y: 0 }
-          # point = { x: mid_a[:x] - e_a[:x], y: mid_a[:y] }
+          nx = -1.0
+          ny = 0.0
         else
-          normal = { x: 1.0, y: 0 }
-          # point = { x: mid_a[:x] + e_a[:x], y: mid_a[:y] }
+          nx = 1.0
+          ny = 0.0
         end
       else
-        depth = dy
         if d[:y] < 0
-          normal = { x: 0, y: -1.0 }
-          # point = { x: mid_a[:x], y: mid_a[:y] - e_a[:y] }
+          nx = 0.0
+          ny = -1.0
         else
-          normal = { x: 0, y: 1.0 }
-          # point = { x: mid_a[:x], y: mid_a[:y] + e_a[:y] }
+          nx = 0.0
+          ny = 1.0
         end
       end
 
-      # Resolve the collision
-      @player[:x] -= normal[:x] * depth / @screen_width
-      @player[:y] -= normal[:y] * depth / @screen_height
+      # Relative velocity in the direction of the collision normal
+      rvn = -@vector_x * nx - @vector_y * ny
+      return if rvn > 0
 
-      # Zero the player's velocity in the direction of the normal
-      dot = @vector_x * normal[:x] + @vector_y * normal[:y]
-      @vector_x -= dot * normal[:x]
-      @vector_y -= dot * normal[:y]
+      # Coefficient of restitution (bounciness)
+      e = 0.3
+
+      # Calculate the impulse magnitude
+      jN = -(1 + e) * rvn
+
+      # Apply the impulse
+      @vector_x -= jN * nx
+      @vector_y -= jN * ny
     end
   end
 
