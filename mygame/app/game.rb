@@ -301,14 +301,14 @@ class Game
         end
       end
 
-      # Relative velocity
-      rvn = -@vector_x * nx - @vector_y * ny # Relative velocity along the normal
+      # Relative velocity in the direction of the collision normal
+      rvn = -@vector_x * nx - @vector_y * ny
       return if rvn > 0
 
       # Coefficient of restitution (bounciness)
       e = 0.3
 
-      # Calculate the impulse scalar
+      # Calculate the impulse magnitude
       jN = -(1 + e) * rvn
 
       # Apply the impulse
