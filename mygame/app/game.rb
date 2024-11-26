@@ -302,21 +302,18 @@ class Game
       end
 
       # Relative velocity
-      relative_velocity_normal = -@vector_x * nx - @vector_y * ny # Relative velocity along the normal
-      return if relative_velocity_normal > 0
+      rvn = -@vector_x * nx - @vector_y * ny # Relative velocity along the normal
+      return if rvn > 0
 
       # Coefficient of restitution (bounciness)
       e = 0.3
 
       # Calculate the impulse scalar
-      jN = -(1 + e) * relative_velocity_normal
+      jN = -(1 + e) * rvn
 
       # Apply the impulse
-      impulse_x = jN * nx
-      impulse_y = jN * ny
-
-      @vector_x -= impulse_x
-      @vector_y -= impulse_y
+      @vector_x -= jN * nx
+      @vector_y -= jN * ny
     end
   end
 
