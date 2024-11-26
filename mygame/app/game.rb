@@ -201,6 +201,10 @@ class Game
     outputs[:minimap].w = @minimap_width
     outputs[:minimap].h = @minimap_height
 
+    outputs[:minimap_mask].w = @minimap_width
+    outputs[:minimap_mask].h = @minimap_height
+    outputs[:minimap_mask].clear_before_render = false
+
     # Draw translucent background
     outputs[:minimap].primitives << {
       x: 0,
@@ -227,11 +231,6 @@ class Game
         outputs[:minimap].primitives << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key? cell[:south]
       end
     end
-
-    # Prepare mask
-    outputs[:minimap_mask].w = @minimap_width
-    outputs[:minimap_mask].h = @minimap_height
-    args.render_target(:minimap_mask).clear_before_render
   end
 
   def draw_minimap
@@ -242,12 +241,78 @@ class Game
     # Calculate player's position in the minimap space
     minimap_player_x = normalized_player_x / @cell_size * @minimap_cell_size
     minimap_player_y = normalized_player_y / @cell_size * @minimap_cell_size
+    
+    # Draw the viewport rect into the mask
+    view_rect_x = (@screen_width / (@maze_width * @cell_size)) * @minimap_width
+    view_rect_y = (@screen_height / (@maze_height * @cell_size)) * @minimap_height
+    outputs[:minimap_mask].clear_before_render = false
+    outputs[:minimap_mask].solids << {
+      x: minimap_player_x,
+      y: minimap_player_y,
+      w: view_rect_x,
+      h: view_rect_y,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      r: 255,
+      g: 255,
+      b: 255,
+      primitive_marker: :solid
+    }
 
-    outputs[:minimap_mask].solids << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, r: 0, g: 0, b: 0, primitive_marker: :solid }
-    outputs[:minimap_mask].sprites << { x: minimap_player_x, y: minimap_player_y, w: 24, h: 24, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/mask.png', blendmode_enum: 2, primitive_marker: :sprite }
 
-    @render_items << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, path: :minimap, primitive_marker: :sprite }
+    # Create a combined render target of the mask and minimap
+    outputs[:minimap_final].w = @minimap_width
+    outputs[:minimap_final].h = @minimap_height
+    outputs[:minimap_final].transient!
 
+    # Draw the mask into the combined render target
+    outputs[:minimap_final].primitives << {
+      x: 0,
+      y: 0,
+      w: @minimap_width,
+      h: @minimap_height,
+      path: :minimap_mask,
+      blendmode_enum: 0,
+      primitive_marker: :sprite
+    }
+
+    # Draw the minimap into the combined render target
+    outputs[:minimap_final].primitives << {
+      x: 0,
+      y: 0,
+      w: @minimap_width,
+      h: @minimap_height,
+      path: :minimap,
+      blendmode_enum: 3,
+      primitive_marker: :sprite
+    }
+
+    # Draw the combined render target of minimap and mask
+    @render_items << {
+      x: 0,
+      y: 0,
+      w: @minimap_width,
+      h: @minimap_height,
+      path: :minimap_final,
+      primitive_marker: :sprite
+    }
+
+    # Debug
+    @minimap_revealed ||= false
+    @minimap_revealed = !@minimap_revealed if args.inputs.keyboard.key_up.r && !args.gtk.production?
+
+    if @minimap_revealed
+      @render_items << {
+        x: 0,
+        y: 0,
+        w: @minimap_width,
+        h: @minimap_height,
+        path: :minimap,
+        primitive_marker: :sprite
+      }
+    end
+
+    # Draw the player on the minimap
     @render_items << {
       x: minimap_player_x,
       y: minimap_player_y,
