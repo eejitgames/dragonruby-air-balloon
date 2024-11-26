@@ -93,14 +93,12 @@ class Maze
   end
 
   def self.prepare_grid rows, cols
-    Array.new(rows) do |row|
+    grid = Array.new(rows) do |row|
       Array.new(cols) do |col|
         { row: row, col: col, links: {} }
       end
     end
-  end
 
-  def self.configure_cells grid
     grid.each do |row|
       row.each do |cell|
         row_index = cell[:row]
