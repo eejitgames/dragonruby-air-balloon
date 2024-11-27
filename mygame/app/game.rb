@@ -185,10 +185,10 @@ class Game
           colliders << { x: x1, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
         end
         unless cell[:links].key? cell[:east]
-          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
+          colliders << { x: x2, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
         end
         unless cell[:links].key? cell[:south]
-          colliders << { x: x1 - @wall_thickness, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness }.merge!(collider)
         end
 
         colliders
@@ -404,8 +404,8 @@ class Game
           next unless rand < @coin_chance_per_cell
 
           loop do
-            quantized_x = (cell[:col] * @maze_cell_w + @wall_thickness + rand(@maze_cell_w - 2 * @wall_thickness)) / @wall_thickness * @wall_thickness
-            quantized_y = (cell[:row] * @maze_cell_h + @wall_thickness + rand(@maze_cell_h - 2 * @wall_thickness)) / @wall_thickness * @wall_thickness
+            quantized_x = (cell[:col] * @maze_cell_w + @wall_thickness + coin[:w] * 0.5 + rand(@maze_cell_w - 2 * @wall_thickness) - coin[:w] * 0.5) / @wall_thickness * @wall_thickness
+            quantized_y = (cell[:row] * @maze_cell_h + @wall_thickness + coin[:h] * 0.5 + rand(@maze_cell_h - 3 * @wall_thickness) - coin[:h] * 0.5) / @wall_thickness * @wall_thickness
 
             new_coin = coin.merge(x: quantized_x, y: quantized_y)
 
