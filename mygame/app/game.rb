@@ -77,11 +77,13 @@ class Game
     if (@player[:x] - @player[:w] * 0.5) < 0
       @player[:x] += @maze_width * @maze_cell_w
       @camera[:x] += @maze_width * @maze_cell_w
+      @camera_teleport_offset[:x] -= @maze_width * @maze_cell_w
     end
 
     if (@player[:x] + @player[:w] * 0.5) > @maze_width * @maze_cell_w
       @player[:x] -= @maze_width * @maze_cell_w
       @camera[:x] -= @maze_width * @maze_cell_w
+      @camera_teleport_offset[:x] += @maze_width * @maze_cell_w
     end
   end
 
@@ -131,8 +133,6 @@ class Game
     new_wind_gain = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) * @wind_gain_multiplier
     audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, @wind_gain_speed)
 
-
-
     # Scroll clouds
     @bg_x -= 0.2
     @clock += 1
@@ -156,10 +156,21 @@ class Game
     outputs.primitives << @render_items
   end
 
+  # Initialize this variable once in your game setup
+
+
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, render_options = {})
-    # Calculate the parallax offset
-    parallax_offset_x = (@player.x * parallax_multiplier + @bg_x) % @bg_w
-    parallax_offset_y = (@player.y * parallax_multiplier + @bg_y) % @bg_h
+    # Adjust the camera position by the accumulated teleport offset
+    adjusted_camera_x = @camera[:x] + @camera_teleport_offset[:x]
+    adjusted_camera_y = @camera[:y] + @camera_teleport_offset[:y]
+
+    # Calculate the parallax offset based on the adjusted camera position
+    parallax_offset_x = (adjusted_camera_x * parallax_multiplier + @bg_x) % @bg_w
+    parallax_offset_y = (adjusted_camera_y * parallax_multiplier + @bg_y) % @bg_h
+
+    # Normalize negative offsets
+    parallax_offset_x += @bg_w if parallax_offset_x < 0
+    parallax_offset_y += @bg_h if parallax_offset_y < 0
 
     # Determine how many tiles are needed to cover the screen
     tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
@@ -624,6 +635,7 @@ class Game
       zoom_speed: 0.05,
       lag: 0.05,
     }
+    @camera_teleport_offset ||= { x: 0, y: 0 }
 
     # Create Background
     @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
