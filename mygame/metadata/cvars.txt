@@ -20,7 +20,7 @@
 # - unfiltered
 # - nothing
 # Default value is "debug" during development and "info" in production.
-# log.level=debug
+log.level=debug
 
 # Log Level Char Preamble
 # Removes the log level char from log output (defaulted to true/enabled)
@@ -41,7 +41,7 @@
 # - Render
 # - HTTP
 # - HTTPServer
-log.filter_subsystems=HTTPServer
+log.filter_subsystems=HTTP, HTTPServer, Engine, Render
 
 # Should use the whole display
 # equivalent to calling $gtk.set_window_fullscreen(true)
