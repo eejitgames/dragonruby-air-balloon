@@ -66,9 +66,29 @@ class Game
     @player_flip = true if dx < 0
   end
 
+  def calc_player
+    @player[:y] += @player[:rising]
+    @player[:x] += @player[:vx]
+    @player[:y] += @player[:vy]
+    @player[:vx] *= @player[:damping]
+    @player[:vy] *= @player[:damping]
+
+    # Warp player
+    if (@player[:x] - @player[:w] * 0.5) < 0
+      @player[:x] += @maze_width * @maze_cell_w
+      @camera[:x] += @maze_width * @maze_cell_w
+    end
+
+    if (@player[:x] + @player[:w] * 0.5) > @maze_width * @maze_cell_w
+      @player[:x] -= @maze_width * @maze_cell_w
+      @camera[:x] -= @maze_width * @maze_cell_w
+    end
+  end
+
   def calc_camera
     tx = @player[:x]
     ty = @player[:y] + @screen_height * @camera[:offset_y] / @camera[:zoom]
+
     @camera[:x] = @camera[:x].lerp(tx, @camera[:lag])
     @camera[:y] = @camera[:y].lerp(ty, @camera[:lag])
 
@@ -76,16 +96,29 @@ class Game
     player_velocity = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) / @player[:max_speed]
     target_zoom = 1.0 - 0.1 * player_velocity  # Zoom out more as speed increases
     @camera[:zoom] = @camera[:zoom].lerp(target_zoom, @camera[:zoom_speed])  # Smooth transition with lerp
+
+    @viewport = {
+      x: @camera[:x] - @screen_width / (2 * @camera[:zoom]),
+      y: @camera[:y] - @screen_height / (2 * @camera[:zoom]),
+      w: @screen_width / @camera[:zoom],
+      h: @screen_height / @camera[:zoom]
+    }
+
+    @wrapped_viewport = nil
+
+    if @viewport[:x] + @viewport[:w] > @maze_width * @maze_cell_w
+      @wrapped_viewport = @viewport.merge(x: @viewport[:x] - @maze_width * @maze_cell_w, position: :right)
+    end
+
+    if @viewport[:x] < 0
+      @wrapped_viewport = @viewport.merge(x: @viewport[:x] + @maze_width * @maze_cell_w, position: :left)
+    end
   end
   def calc
     return if game_has_lost_focus?
 
-    # Calc Player
-    @player[:y] += @player[:rising]
-    @player[:x] += @player[:vx]
-    @player[:y] += @player[:vy]
-    @player[:vx] *= @player[:damping]
-    @player[:vy] *= @player[:damping]
+    calc_player
+    calc_camera
 
     # Calc birds
     try_create_bird
@@ -98,14 +131,7 @@ class Game
     new_wind_gain = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) * @wind_gain_multiplier
     audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, @wind_gain_speed)
 
-    calc_camera
 
-    @viewport = {
-      x: @camera[:x] - @screen_width / (2 * @camera[:zoom]),
-      y: @camera[:y] - @screen_height / (2 * @camera[:zoom]),
-      w: @screen_width / @camera[:zoom],
-      h: @screen_height / @camera[:zoom]
-    }
 
     # Scroll clouds
     @bg_x -= 0.2
@@ -123,7 +149,7 @@ class Game
     draw_player
 
     # Draw foreground
-    draw_parallax_layer_tiles(@bg_parallax * 3.0, 'sprites/cloudy_foreground.png', a: 32, blendmode_enum: 2)
+    draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', a: 32, blendmode_enum: 2)
 
     draw_minimap
 
@@ -168,7 +194,7 @@ class Game
 
     collider = { r: 32, g: 255, b: 32, a: 32, primitive_marker: :solid }
 
-    # Create collision rects
+    # Create collision rects for maze
     maze_colliders = @maze.flat_map do |row|
       row.flat_map do |cell|
         x1 = cell[:col] * @maze_cell_w
@@ -206,6 +232,20 @@ class Game
         w: wall[:w] * @camera[:zoom],
         h: wall[:h] * @camera[:zoom]
       )
+    end
+
+    if @wrapped_viewport
+      GTK::Geometry.find_all_intersect_rect_quad_tree(@wrapped_viewport, @maze_colliders_quad_tree).each do |wall|
+        map_w = @maze_width * @maze_cell_w
+        map_w = @wrapped_viewport[:position] == :left ? map_w : -map_w
+
+        @render_items << wall.merge(
+          x: x_to_screen(wall[:x] - map_w),
+          y: y_to_screen(wall[:y]),
+          w: wall[:w] * @camera[:zoom],
+          h: wall[:h] * @camera[:zoom]
+        )
+      end
     end
   end
 
@@ -438,6 +478,20 @@ class Game
         h: item[:h] * @camera[:zoom]
       )
     end
+
+    if @wrapped_viewport
+      GTK::Geometry.find_all_intersect_rect(@wrapped_viewport, @items).each do |item|
+        map_w = @maze_width * @maze_cell_w
+        map_w = @wrapped_viewport[:position] == :left ? map_w : -map_w
+
+        @render_items << item.merge(
+          x: x_to_screen(item[:x] - map_w),
+          y: y_to_screen(item[:y]),
+          w: item[:w] * @camera[:zoom],
+          h: item[:h] * @camera[:zoom]
+        )
+      end
+    end
   end
 
   def try_create_bird
@@ -575,7 +629,7 @@ class Game
     @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
     @bg_y = 0
     @bg_x = 0
-    @bg_parallax = 0.5
+    @bg_parallax = 0.3
 
     # Create Items
     create_coins
