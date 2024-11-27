@@ -158,8 +158,8 @@ class Game
 
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, render_options = {})
     # Calculate the parallax offset
-    parallax_offset_x = (@player.x * parallax_multiplier + @bg_x) % @bg_w
-    parallax_offset_y = (@player.y * parallax_multiplier + @bg_y) % @bg_h
+    parallax_offset_x = (@camera[:x] * parallax_multiplier + @bg_x) % @bg_w
+    parallax_offset_y = (@camera[:y] * parallax_multiplier + @bg_y) % @bg_h
 
     # Determine how many tiles are needed to cover the screen
     tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
