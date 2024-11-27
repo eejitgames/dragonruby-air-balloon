@@ -60,31 +60,52 @@ class Game
       dy *= l
     end
 
-    @vector_x = (@vector_x + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
-    @vector_y = (@vector_y + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+    @player[:vx] = (@player[:vx] + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+    @player[:vy] = (@player[:vy] + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
     @player_flip = false if dx > 0
     @player_flip = true if dx < 0
   end
 
+  def calc_camera
+    tx = @player[:x]
+    ty = @player[:y] + @screen_height * @camera[:offset_y] / @camera[:zoom]
+    @camera[:x] = @camera[:x].lerp(tx, @camera[:lag])
+    @camera[:y] = @camera[:y].lerp(ty, @camera[:lag])
+
+    # Adjust camera zoom based on player velocity
+    player_velocity = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) / @player[:max_speed]
+    target_zoom = 1.0 - 0.1 * player_velocity  # Zoom out more as speed increases
+    @camera[:zoom] = @camera[:zoom].lerp(target_zoom, @camera[:zoom_speed])  # Smooth transition with lerp
+  end
   def calc
     return if game_has_lost_focus?
 
     # Calc Player
-    @player.y += @player[:rising]
-    @player.x = (@player[:x] + @vector_x)
-    @player.y = (@player[:y] + @vector_y)
-    @vector_x *= @player[:damping]
-    @vector_y *= @player[:damping]
+    @player[:y] += @player[:rising]
+    @player[:x] += @player[:vx]
+    @player[:y] += @player[:vy]
+    @player[:vx] *= @player[:damping]
+    @player[:vy] *= @player[:damping]
 
-    handle_collision
+    # Calc birds
+    try_create_bird
+
+    # Handle collision
+    handle_wall_collision
+    handle_item_collision
 
     # Calc Wind
-    new_wind_gain = Math.sqrt(@vector_x * @vector_x + @vector_y * @vector_y) * 500.0
-    audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, 0.08)
+    new_wind_gain = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) * @wind_gain_multiplier
+    audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, @wind_gain_speed)
 
-    # Calc Camera
-    @camera.x = @player[:x] - @camera[:offset_x]
-    @camera.y = @player[:y] - @camera[:offset_y]
+    calc_camera
+
+    @viewport = {
+      x: @camera[:x] - @screen_width / (2 * @camera[:zoom]),
+      y: @camera[:y] - @screen_height / (2 * @camera[:zoom]),
+      w: @screen_width / @camera[:zoom],
+      h: @screen_height / @camera[:zoom]
+    }
 
     # Scroll clouds
     @bg_x -= 0.2
@@ -98,6 +119,7 @@ class Game
     draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png')
 
     draw_maze
+    draw_items
     draw_player
 
     # Draw foreground
@@ -110,8 +132,8 @@ class Game
 
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, render_options = {})
     # Calculate the parallax offset
-    parallax_offset_x = (@player.x * @screen_width * parallax_multiplier + @bg_x) % @bg_w
-    parallax_offset_y = (@player.y * @screen_height * parallax_multiplier + @bg_y) % @bg_h
+    parallax_offset_x = (@player.x * parallax_multiplier + @bg_x) % @bg_w
+    parallax_offset_y = (@player.y * parallax_multiplier + @bg_y) % @bg_h
 
     # Determine how many tiles are needed to cover the screen
     tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
@@ -163,10 +185,10 @@ class Game
           colliders << { x: x1, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
         end
         unless cell[:links].key? cell[:east]
-          colliders << { x: x2 - @wall_thickness, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
+          colliders << { x: x2, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
         end
         unless cell[:links].key? cell[:south]
-          colliders << { x: x1 - @wall_thickness, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness }.merge!(collider)
         end
 
         colliders
@@ -177,21 +199,12 @@ class Game
   end
 
   def draw_maze
-    camera_x = @camera.x * @screen_width
-    camera_y = @camera.y * @screen_height
-
-    # Draw colliders.  Quad tree used for frustum culling
-    viewport = {
-      x: camera_x,
-      y: camera_y,
-      w: @screen_width,
-      h: @screen_height
-    }
-
-    GTK::Geometry.find_all_intersect_rect_quad_tree(viewport, @maze_colliders_quad_tree).each do |collision|
-      @render_items << collision.merge(
-        x: collision[:x] - camera_x,
-        y: collision[:y] - camera_y
+    GTK::Geometry.find_all_intersect_rect_quad_tree(@viewport, @maze_colliders_quad_tree).each do |wall|
+      @render_items << wall.merge(
+        x: x_to_screen(wall[:x]),
+        y: y_to_screen(wall[:y]),
+        w: wall[:w] * @camera[:zoom],
+        h: wall[:h] * @camera[:zoom]
       )
     end
   end
@@ -234,8 +247,8 @@ class Game
 
   def draw_minimap
     # Normalize player's position
-    normalized_player_x = @player[:x] * @screen_width
-    normalized_player_y = @player[:y] * @screen_height
+    normalized_player_x = @player[:x]
+    normalized_player_y = @player[:y]
 
     # Calculate player's position in the minimap space
     minimap_player_x = normalized_player_x / @maze_cell_w * @minimap_cell_size
@@ -326,18 +339,13 @@ class Game
     }
   end
 
-  def handle_collision
-    player_x = @player[:x] * @screen_width - @player[:w] * 0.5
-    player_y = @player[:y] * @screen_height - @player[:h] * 0.5
-    player_w = @player[:w]
-    player_h = @player[:h]
+  def handle_wall_collision
+    player_mid_x = @player[:x]
+    player_mid_y = @player[:y]
+    player_half_w = @player[:w] * 0.5
+    player_half_h = @player[:h] * 0.5
 
-    player_mid_x = player_x + player_w * 0.5
-    player_mid_y = player_y + player_h * 0.5
-    player_half_w = player_w * 0.5
-    player_half_h = player_h * 0.5
-
-    GTK::Geometry.find_all_intersect_rect_quad_tree({ x: player_x, y: player_y, w: player_w, h: player_h }, @maze_colliders_quad_tree).each do |collision|
+    GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree).each do |collision|
       collision_mid_x = collision[:x] + collision[:w] * 0.5
       collision_mid_y = collision[:y] + collision[:h] * 0.5
       collision_half_w = collision[:w] * 0.5
@@ -361,44 +369,111 @@ class Game
       end
 
       # Relative velocity in the direction of the collision normal
-      rvn = -(nx * @vector_x + ny * @vector_y)
+      rvn = -(nx * @player[:vx] + ny * @player[:vy])
       next if rvn > 0
 
-      # Coefficient of restitution (bounciness)
-      e = 0.3
-
       # Calculate the impulse magnitude
-      jN = -(1 + e) * rvn
+      jN = -(1 + @cloud_bounciness) * rvn
 
       # Apply the impulse
-      @vector_x -= jN * nx
-      @vector_y -= jN * ny
+      @player[:vx] -= jN * nx
+      @player[:vy] -= jN * ny
     end
   end
 
+  def handle_item_collision
+    GTK::Geometry.find_all_intersect_rect(@player, @items).each do |item|
+      if item[:item_type] == :coin
+        args.audio[:coin] = { input: "sounds/coin.wav", gain: 0.5 }
+        @player[:score] += 1
+        @items.delete(item)
+      end
+    end
+  end
+
+  def create_coins
+    coin = { w: 32, h: 32, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/coin.png', primitive_marker: :sprite }
+
+    @max_coins_per_cell = 2
+    @coin_chance_per_cell = 0.5
+    @coins = []
+
+    @maze.each do |row|
+      row.each do |cell|
+        @max_coins_per_cell.times do
+          next unless rand < @coin_chance_per_cell
+
+          loop do
+            quantized_x = (cell[:col] * @maze_cell_w + @wall_thickness + coin[:w] * 0.5 + rand(@maze_cell_w - 2 * @wall_thickness) - coin[:w] * 0.5) / @wall_thickness * @wall_thickness
+            quantized_y = (cell[:row] * @maze_cell_h + @wall_thickness + coin[:h] * 0.5 + rand(@maze_cell_h - 3 * @wall_thickness) - coin[:h] * 0.5) / @wall_thickness * @wall_thickness
+
+            new_coin = coin.merge(x: quantized_x, y: quantized_y)
+
+            # Check for overlap
+            overlap = @coins.any? do |existing_coin|
+              (existing_coin[:x] - new_coin[:x]).abs < @wall_thickness && (existing_coin[:y] - new_coin[:y]).abs < @wall_thickness
+            end
+
+            unless overlap
+              @coins << new_coin
+              break
+            end
+          end
+        end
+      end
+    end
+  end
+
+  def create_items
+    # TODO: add additional item arrays
+    @items = [].concat(@coins)
+  end
+
+  def draw_items
+    GTK::Geometry.find_all_intersect_rect(@viewport, @items).each do |item|
+      @render_items << item.merge(
+        x: x_to_screen(item[:x]),
+        y: y_to_screen(item[:y]),
+        w: item[:w] * @camera[:zoom],
+        h: item[:h] * @camera[:zoom]
+      )
+    end
+  end
+
+  def try_create_bird
+    @bird ||= { w: 48, h: 32, r: 0, g: 255, b: 0, anchor_x: 0.5, anchor_y: 0.5, primitive_marker: :solid }
+    @birds ||= []
+
+    if args.state.tick_count % @bird_spawn_interval == 0
+      @birds << @bird.merge(
+        x: rand * @screen_width,
+        y: rand * @screen_height,
+      )
+    end
+  end
+
+  def draw_birds
+
+  end
 
   def draw_player
     player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: 10, repeat: true)
-    @player_sprite_path = "sprites/balloon_#{player_sprite_index + 1}.png"
 
-    @render_items << {
-      x: x_to_screen(@player.x - @camera.x),
-      y: y_to_screen(@player.y - @camera.y),
-      w: @player[:w],
-      h: @player[:h],
-      anchor_x: 0.5,
-      anchor_y: 0.5,
-      path: @player_sprite_path,
-      flip_horizontally: @player_flip
-    }
+    @render_items << @player.merge(
+      x: x_to_screen(@player[:x]),
+      y: y_to_screen(@player[:y]),
+      w: @player[:w] * @camera[:zoom],
+      h: @player[:h] * @camera[:zoom],
+      path: "sprites/balloon_#{player_sprite_index + 1}.png",
+      flip_horizontally: @player_flip)
   end
 
   def x_to_screen(x)
-    x * @screen_width
+    ((x - @camera[:x]) * @camera[:zoom]) + @screen_width * 0.5
   end
 
   def y_to_screen(y)
-    y * @screen_height
+    ((y - @camera[:y]) * @camera[:zoom]) + @screen_height * 0.5
   end
 
   def game_has_lost_focus?
@@ -428,28 +503,36 @@ class Game
     @next_scene = nil
     @tile_x = nil
     @tile_y = nil
-    @screen_height = 720
-    @screen_width = 1280
+    @screen_height = 1280
+    @screen_width = 720
     @wall_thickness = 48
-    @vector_x = 0
-    @vector_y = 0
+
     @player = {
-      x: 0.5,
-      y: 0.15,
+      x: @wall_thickness * 2.0,
+      y: @wall_thickness * 2.0,
       w: 120,
       h: 176,
-      speed: 0.0002,
-      rising: 0.0003,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      flip_horizontally: false,
+
+      score: 0,
+
+      # Physics
+      vx: 0.0,
+      vy: 0.0,
+      speed: 2.0,
+      rising: 0.0,
       damping: 0.95,
-      max_speed: 0.01,
+      max_speed: 10.0,
     }
+
     audio[:music] = {
       input: "sounds/InGameTheme20secGJ.ogg",
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.1,
-      pitch: 1.0,
+      gain: 0.0,
       paused: true,
       looping: true
     }
@@ -459,7 +542,6 @@ class Game
       y: 0.0,
       z: 0.0,
       gain: 0.0,
-      pitch: 1.0,
       paused: true,
       looping: true
     }
@@ -467,8 +549,8 @@ class Game
     # Create Maze
     @maze_cell_w = 400
     @maze_cell_h = 600
-    @maze_width = 10
-    @maze_height = 20
+    @maze_width = 5
+    @maze_height = 10
 
     create_maze
 
@@ -479,13 +561,35 @@ class Game
     create_minimap
 
     # Create Camera
-    @camera ||= { x: 0.0, y: 0.0, offset_x: 0.5, offset_y: 0.5 }
+    @camera ||= {
+      x: 0.0,
+      y: 0.0,
+      offset_x: 0.5,
+      offset_y: 0.2,
+      zoom: 1.0,
+      zoom_speed: 0.05,
+      lag: 0.05,
+    }
 
     # Create Background
     @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
     @bg_y = 0
     @bg_x = 0
     @bg_parallax = 0.5
+
+    # Create Items
+    create_coins
+    create_items
+
+    # Birds
+    @bird_spawn_interval = 480
+
+    # Configure wind
+    @wind_gain_multiplier = 1.0
+    @wind_gain_speed = 0.8
+
+    # Configure clouds
+    @cloud_bounciness = 0.75 # 0..1 representing energy loss on bounce
 
     @defaults_set = :true
   end
