@@ -110,6 +110,14 @@ class Maze
         cell[:east]  = col_index.between?(0, row.size - 2) ? row[col_index + 1] : nil
       end
     end
+
+    # Wrap around the first and last columns
+    grid.each do |row|
+      row.first[:west] = row.last
+      row.last[:east] = row.first
+    end
+
+    grid
   end
 end
 
