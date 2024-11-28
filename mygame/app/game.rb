@@ -621,7 +621,7 @@ class Game
       control_y2 = @player[:y] - @player[:h]
 
       # 4) End point
-      x2 = @viewport[:x]
+      x2 = @viewport[:x] - @viewport[:w] # path length = viewport[:w] * 2
       y2 = @viewport[:y] + rand * @viewport[:h]
 
       # 5) Generate a spline path that intersects with the player
@@ -651,7 +651,7 @@ class Game
       bird[:angle] = Math.atan2(dy, dx) * (180 / Math::PI)
 
       # Remove when offscreen
-      bird[:x] < @viewport[:x]
+      bird[:progress] == 1
     end
   end
 
@@ -845,7 +845,7 @@ class Game
     create_items
 
     # Birds
-    @bird_spawn_interval = 480
+    @bird_spawn_interval = 120
 
     # Configure wind
     @wind_gain_multiplier = 7.0
