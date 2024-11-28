@@ -30,7 +30,10 @@ class Game
   def tick_game_scene
     input
     calc
-    render
+    outputs.primitives << self
+
+    # Hack, draw minimap here instead of in main render method
+    draw_minimap
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_over_scene
@@ -138,28 +141,17 @@ class Game
     @clock += 1
   end
 
-  def render
-    @render_items = []
+  def draw_override ffi
+    draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png', ffi)
 
-    # Draw background
-    draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png')
+    draw_maze(ffi)
+    draw_items(ffi)
+    draw_player(ffi)
 
-    draw_maze
-    draw_items
-    draw_player
-
-    # Draw foreground
-    draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', a: 32, blendmode_enum: 2)
-
-    draw_minimap
-
-    outputs.primitives << @render_items
+    draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
   end
 
-  # Initialize this variable once in your game setup
-
-
-  def draw_parallax_layer_tiles(parallax_multiplier, image_path, render_options = {})
+  def draw_parallax_layer_tiles(parallax_multiplier, image_path, ffi, render_options = {})
     # Adjust the camera position by the accumulated teleport offset
     adjusted_camera_x = @camera[:x] + @camera_teleport_offset[:x]
     adjusted_camera_y = @camera[:y] + @camera_teleport_offset[:y]
@@ -184,15 +176,29 @@ class Game
         x = (tile_x * @bg_w) - parallax_offset_x
         y = (tile_y * @bg_h) - parallax_offset_y
 
-        # Add the tile to render items
-        @render_items << {
-          x: x,
-          y: y,
-          w: @bg_w,
-          h: @bg_h,
-          path: image_path
-        }.merge(render_options)
-
+        ffi.draw_sprite_4 x,                          # x
+                          y,                          # y
+                          @bg_w,                      # w
+                          @bg_h,                      # h
+                          image_path,                 # path
+                          nil,                        # angle
+                          render_options[:a] || nil,  # alpha
+                          nil,                        # r
+                          nil,                        # g
+                          nil,                        # b
+                          nil,                        # tile_x
+                          nil,                        # tile_y
+                          nil,                        # tile_w
+                          nil,                        # tile_h
+                          nil,                        # flip_horizontally
+                          nil,                        # flip_vertically
+                          nil,                        # angle_anchor_x
+                          nil,                        # angle_anchor_y
+                          nil,                        # source_x
+                          nil,                        # source_y
+                          nil,                        # source_w
+                          nil,                        # source_h
+                          render_options[:blendmode_enum] || nil
         tile_y += 1
       end
       tile_x += 1
@@ -235,14 +241,16 @@ class Game
     @maze_colliders_quad_tree = GTK::Geometry.quad_tree_create(maze_colliders)
   end
 
-  def draw_maze
+  def draw_maze(ffi)
     GTK::Geometry.find_all_intersect_rect_quad_tree(@viewport, @maze_colliders_quad_tree).each do |wall|
-      @render_items << wall.merge(
-        x: x_to_screen(wall[:x]),
-        y: y_to_screen(wall[:y]),
-        w: wall[:w] * @camera[:zoom],
-        h: wall[:h] * @camera[:zoom]
-      )
+      ffi.draw_solid(x_to_screen(wall[:x]),
+                     y_to_screen(wall[:y]),
+                     wall[:w] * @camera[:zoom],
+                     wall[:h] * @camera[:zoom],
+                     wall[:r],
+                     wall[:g],
+                     wall[:b],
+                     wall[:a])
     end
 
     if @wrapped_viewport
@@ -250,12 +258,14 @@ class Game
         map_w = @maze_width * @maze_cell_w
         map_w = @wrapped_viewport[:position] == :left ? map_w : -map_w
 
-        @render_items << wall.merge(
-          x: x_to_screen(wall[:x] - map_w),
-          y: y_to_screen(wall[:y]),
-          w: wall[:w] * @camera[:zoom],
-          h: wall[:h] * @camera[:zoom]
-        )
+        ffi.draw_solid(x_to_screen(wall[:x] - map_w),
+                       y_to_screen(wall[:y]),
+                       wall[:w] * @camera[:zoom],
+                       wall[:h] * @camera[:zoom],
+                       wall[:r],
+                       wall[:g],
+                       wall[:b],
+                       wall[:a])
       end
     end
   end
@@ -264,34 +274,23 @@ class Game
     outputs[:minimap].w = @minimap_width
     outputs[:minimap].h = @minimap_height
 
+    outputs[:minimap].primitives << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, r: 0, g: 0, b: 0, primitive_marker: :solid }
+
     outputs[:minimap_mask].w = @minimap_width
     outputs[:minimap_mask].h = @minimap_height
     outputs[:minimap_mask].clear_before_render = false
 
-    # Draw translucent background
-    outputs[:minimap].primitives << {
-      x: 0,
-      y: 0,
-      w: @maze_width * @minimap_cell_size,
-      h: @maze_height * @minimap_cell_size,
-      r: 0,
-      g: 0,
-      b: 0,
-      a: 96,
-      primitive_marker: :solid
-    }
-
-    # [Debug] draw maze as a minimap
+    # Draw maze as a minimap
     @maze.each do |row|
       row.each do |cell|
         x1 = cell[:col] * @minimap_cell_size
         y1 = cell[:row] * @minimap_cell_size
         x2 = (cell[:col] + 1) * @minimap_cell_size
         y2 = (cell[:row] + 1) * @minimap_cell_size
-        outputs[:minimap].primitives << { x: x1, y: y1, x2: x2, y2: y1, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:north]
-        outputs[:minimap].primitives << { x: x1, y: y1, x2: x1, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:west]
-        outputs[:minimap].primitives << { x: x2, y: y1, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key?(cell[:east])
-        outputs[:minimap].primitives << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 0, primitive_marker: :line } unless cell[:links].key?(cell[:south])
+        outputs[:minimap].primitives << { x: x1, y: y1, x2: x2, y2: y1, r: 255, g: 255, b: 255, primitive_marker: :line } unless cell[:north]
+        outputs[:minimap].primitives << { x: x1, y: y1, x2: x1, y2: y2, r: 255, g: 255, b: 255, primitive_marker: :line } unless cell[:west]
+        outputs[:minimap].primitives << { x: x2, y: y1, x2: x2, y2: y2, r: 255, g: 255, b: 255, primitive_marker: :line } unless cell[:links].key?(cell[:east])
+        outputs[:minimap].primitives << { x: x1, y: y2, x2: x2, y2: y2, r: 255, g: 255, b: 255, primitive_marker: :line } unless cell[:links].key?(cell[:south])
       end
     end
   end
@@ -306,8 +305,9 @@ class Game
     minimap_player_y = normalized_player_y / @maze_cell_h * @minimap_cell_size
     
     # Draw the viewport rect into the mask
-    view_rect_x = (@screen_width / (@maze_width * @maze_cell_w)) * @minimap_width
-    view_rect_y = (@screen_height / (@maze_height * @maze_cell_h)) * @minimap_height
+    view_rect_x = (@viewport[:w] / (@maze_width * @maze_cell_w)) * @minimap_width
+    view_rect_y = (@viewport[:h] / (@maze_height * @maze_cell_h)) * @minimap_height
+
     outputs[:minimap_mask].clear_before_render = false
     outputs[:minimap_mask].solids << {
       x: minimap_player_x,
@@ -322,7 +322,6 @@ class Game
       primitive_marker: :solid
     }
 
-
     # Create a combined render target of the mask and minimap
     outputs[:minimap_final].w = @minimap_width
     outputs[:minimap_final].h = @minimap_height
@@ -335,6 +334,7 @@ class Game
       w: @minimap_width,
       h: @minimap_height,
       path: :minimap_mask,
+
       blendmode_enum: 0,
       primitive_marker: :sprite
     }
@@ -350,14 +350,24 @@ class Game
       primitive_marker: :sprite
     }
 
+    # Draw a solid background
+    outputs.primitives << {
+      x: 0,
+      y: 0,
+      w: @minimap_width,
+      h: @minimap_height,
+      r: 0, g: 0, b: 0, a: 64,
+      primitive_marker: :solid,
+    }
+
     # Draw the combined render target of minimap and mask
-    @render_items << {
+    outputs.primitives << {
       x: 0,
       y: 0,
       w: @minimap_width,
       h: @minimap_height,
       path: :minimap_final,
-      primitive_marker: :sprite
+      blendmode_enum: 2,
     }
 
     # Debug
@@ -365,18 +375,17 @@ class Game
     @minimap_revealed = !@minimap_revealed if args.inputs.keyboard.key_up.r && !args.gtk.production?
 
     if @minimap_revealed
-      @render_items << {
+      outputs[:primitives] << {
         x: 0,
         y: 0,
         w: @minimap_width,
         h: @minimap_height,
         path: :minimap,
-        primitive_marker: :sprite
       }
     end
 
-    # Draw the player on the minimap
-    @render_items << {
+    # Draw player position
+    outputs.primitives << {
       x: minimap_player_x,
       y: minimap_player_y,
       w: 5,
@@ -384,9 +393,9 @@ class Game
       r: 255,
       g: 0,
       b: 0,
+      primitive_marker: :solid,
       anchor_x: 0.5,
-      anchor_y: 0.5,
-      primitive_marker: :solid
+      anchor_y: 0.5
     }
   end
 
@@ -435,7 +444,7 @@ class Game
   def handle_item_collision
     GTK::Geometry.find_all_intersect_rect(@player, @items).each do |item|
       if item[:item_type] == :coin
-        args.audio[:coin] = { input: "sounds/coin.wav", gain: 0.5 }
+        args.audio[:coin] = { input: "sounds/coin.wav", gain: 0.1 }
         @player[:score] += 1
         @items.delete(item)
       end
@@ -480,14 +489,33 @@ class Game
     @items = [].concat(@coins)
   end
 
-  def draw_items
+  def draw_items(ffi)
     GTK::Geometry.find_all_intersect_rect(@viewport, @items).each do |item|
-      @render_items << item.merge(
-        x: x_to_screen(item[:x]),
-        y: y_to_screen(item[:y]),
-        w: item[:w] * @camera[:zoom],
-        h: item[:h] * @camera[:zoom]
-      )
+      ffi.draw_sprite_5(x_to_screen(item[:x]),      # x
+                        y_to_screen(item[:y]),      # y
+                        item[:w] * @camera[:zoom],  # w
+                        item[:h] * @camera[:zoom],  # h
+                        item[:path],                # path
+                        nil,                        # angle
+                        nil,                        # alpha
+                        nil,                        # r
+                        nil,                        # g,
+                        nil,                        # b
+                        nil,                        # tile_x
+                        nil,                        # tile_y
+                        nil,                        # tile_w
+                        nil,                        # tile_h
+                        nil,                        # flip_horizontally
+                        nil,                        # flip_vertically
+                        nil,                        # angle_anchor_x
+                        nil,                        # angle_anchor_y
+                        nil,                        # source_x
+                        nil,                        # source_y
+                        nil,                        # source_w,
+                        nil,                        # source_h
+                        nil,                        # blendmode_enum
+                        0.5,                        # anchor_x
+                        0.5)                        # anchor_y
     end
 
     if @wrapped_viewport
@@ -495,12 +523,31 @@ class Game
         map_w = @maze_width * @maze_cell_w
         map_w = @wrapped_viewport[:position] == :left ? map_w : -map_w
 
-        @render_items << item.merge(
-          x: x_to_screen(item[:x] - map_w),
-          y: y_to_screen(item[:y]),
-          w: item[:w] * @camera[:zoom],
-          h: item[:h] * @camera[:zoom]
-        )
+        ffi.draw_sprite_5(x_to_screen(item[:x] - map_w), # x
+                          y_to_screen(item[:y]), # y
+                          item[:w] * @camera[:zoom], # w
+                          item[:h] * @camera[:zoom], # h
+                          item[:path], # path
+                          nil, # angle
+                          nil, # alpha
+                          nil, # r
+                          nil, # g,
+                          nil, # b
+                          nil, # tile_x
+                          nil, # tile_y
+                          nil, # tile_w
+                          nil, # tile_h
+                          @player_flip, # flip_horizontally
+                          nil, # flip_vertically
+                          nil, # angle_anchor_x
+                          nil, # angle_anchor_y
+                          nil, # source_x
+                          nil, # source_y
+                          nil, # source_w,
+                          nil, # source_h
+                          nil, # blendmode_enum
+                          0.5, # anchor_x
+                          0.5) # anchor_y
       end
     end
   end
@@ -521,16 +568,34 @@ class Game
 
   end
 
-  def draw_player
+  def draw_player(ffi)
     player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: 10, repeat: true)
 
-    @render_items << @player.merge(
-      x: x_to_screen(@player[:x]),
-      y: y_to_screen(@player[:y]),
-      w: @player[:w] * @camera[:zoom],
-      h: @player[:h] * @camera[:zoom],
-      path: "sprites/balloon_#{player_sprite_index + 1}.png",
-      flip_horizontally: @player_flip)
+    ffi.draw_sprite_5(x_to_screen(@player[:x]), # x
+                      y_to_screen(@player[:y]), # y
+                      @player[:w] * @camera[:zoom], # w
+                      @player[:h] * @camera[:zoom], # h
+                      "sprites/balloon_#{player_sprite_index + 1}.png", # path
+                      nil, # angle
+                      nil, # alpha
+                      nil, # r
+                      nil, # g,
+                      nil, # b
+                      nil, # tile_x
+                      nil, # tile_y
+                      nil, # tile_w
+                      nil, # tile_h
+                      @player_flip, # flip_horizontally
+                      nil, # flip_vertically
+                      nil, # angle_anchor_x
+                      nil, # angle_anchor_y
+                      nil, # source_x
+                      nil, # source_y
+                      nil, # source_w,
+                      nil, # source_h
+                      nil, # blendmode_enum
+                      0.5, # anchor_x
+                      0.5) # anchor_y
   end
 
   def x_to_screen(x)
@@ -593,16 +658,16 @@ class Game
     }
 
     audio[:music] = {
-      input: "sounds/InGameTheme20secGJ.ogg",
+      input: 'sounds/up-up-and-away-sketch.ogg',
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.0,
+      gain: 0.1,
       paused: true,
       looping: true
     }
     audio[:wind] = {
-      input: "sounds/Wind.ogg",
+      input: 'sounds/Wind.ogg',
       x: 0.0,
       y: 0.0,
       z: 0.0,
@@ -620,7 +685,7 @@ class Game
     create_maze
 
     # Create Minimap
-    @minimap_cell_size = 10
+    @minimap_cell_size = 16
     @minimap_width = @maze_width * @minimap_cell_size
     @minimap_height = @maze_height * @minimap_cell_size
     create_minimap
@@ -651,8 +716,8 @@ class Game
     @bird_spawn_interval = 480
 
     # Configure wind
-    @wind_gain_multiplier = 1.0
-    @wind_gain_speed = 0.8
+    @wind_gain_multiplier = 7.0
+    @wind_gain_speed = 0.2
 
     # Configure clouds
     @cloud_bounciness = 0.75 # 0..1 representing energy loss on bounce
