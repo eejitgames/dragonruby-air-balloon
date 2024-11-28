@@ -8,7 +8,7 @@ class Game
 
     # outputs.debug.watch state
     # outputs.watch "#{$gtk.current_framerate} FPS"
-    outputs.debug.watch "tick count: #{@clock}"
+    #outputs.debug.watch "tick count: #{@clock}"
 
     # has there been a scene change ?
     if @next_scene
@@ -24,6 +24,7 @@ class Game
       @next_scene = :tick_game_scene
       audio[:music].paused = false
       audio[:wind].paused = false
+      @clock = 0
     end
   end
 
@@ -40,6 +41,13 @@ class Game
       audio[:music].paused = true
       audio[:wind].paused = true
     end
+
+    @timer = (21 - @clock / 60.0).to_i
+    draw_timer
+
+    if @timer <= 0
+      @current_scene = :tick_game_over_scene
+    end
   end
 
   def tick_game_over_scene
@@ -47,6 +55,7 @@ class Game
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_title_scene
+      @defaults_set = false
     end
   end
 
@@ -281,7 +290,7 @@ class Game
 
     outputs[:minimap_mask].w = @minimap_width
     outputs[:minimap_mask].h = @minimap_height
-    outputs[:minimap_mask].clear_before_render = false
+    outputs[:minimap_mask].clear_before_render = !@defaults_set
 
     # Draw maze as a minimap
     @maze.each do |row|
@@ -402,13 +411,42 @@ class Game
     }
   end
 
+  def draw_timer
+    args.outputs.labels << {
+      x: @screen_width - 20,
+      y: @screen_height - 40,
+      text: "#{@timer}",
+      anchor_x: 1.0,
+      anchor_y: 1.0,
+      size_enum: 16,
+      font: 'fonts/Chango-Regular.ttf'
+    }
+    args.outputs.labels << {
+      x: @screen_width - 21,
+      y: @screen_height - 38,
+      text: "#{@timer}",
+      anchor_x: 1.0,
+      anchor_y: 1.0,
+      size_enum: 16,
+      r: 255,
+      g: 255,
+      b: 255,
+      font: 'fonts/Chango-Regular.ttf'
+    }
+  end
+
   def handle_wall_collision
     player_mid_x = @player[:x]
     player_mid_y = @player[:y]
     player_half_w = @player[:w] * 0.5
     player_half_h = @player[:h] * 0.5
 
-    GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree).each do |collision|
+    GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree).concat(
+      GTK::Geometry.find_all_intersect_rect_quad_tree(@wrapped_viewport, @maze_colliders_quad_tree).map do |wall|
+        wall.merge(x: wall[:x] - @maze_width * @maze_cell_w)
+      end
+    ).each do |collision|
+
       collision_mid_x = collision[:x] + collision[:w] * 0.5
       collision_mid_y = collision[:y] + collision[:h] * 0.5
       collision_half_w = collision[:w] * 0.5
@@ -609,7 +647,7 @@ class Game
 
     if args.state.tick_count % @bird_spawn_interval == 0
       # 1) Pick left or right side of screen
-      x = @viewport[:x] + @viewport[:w]
+      x = @viewport[:x] + @viewport[:w] * 2.0
 
       # 2) Pick a random start height
       y = @viewport[:y] + rand * @viewport[:h]
@@ -639,7 +677,7 @@ class Game
   def calc_birds
     @birds.reject! do |bird|
       bird[:progress] ||= 0
-      bird[:progress] += 0.007 # speed
+      bird[:progress] += 0.005 # speed
 
       bird[:progress] = 1 if bird[:progress] >= 1
 
@@ -813,7 +851,6 @@ class Game
     @maze_cell_h = 600
     @maze_width = 5
     @maze_height = 10
-
     create_maze
 
     # Create Minimap
@@ -823,7 +860,7 @@ class Game
     create_minimap
 
     # Create Camera
-    @camera ||= {
+    @camera = {
       x: 0.0,
       y: 0.0,
       offset_x: 0.5,
@@ -832,7 +869,7 @@ class Game
       zoom_speed: 0.05,
       lag: 0.05,
     }
-    @camera_teleport_offset ||= { x: 0, y: 0 }
+    @camera_teleport_offset = { x: 0, y: 0 }
 
     # Create Background
     @bg_w, @bg_h = gtk.calcspritebox("sprites/cloudy_background.png")
