@@ -646,31 +646,45 @@ class Game
     @birds ||= []
 
     if args.state.tick_count % @bird_spawn_interval == 0
-      # 1) Pick left or right side of screen
-      x = @viewport[:x] + @viewport[:w] * 2.0
+      # Determine direction randomly
+      direction = rand < 0.5 ? :left_to_right : :right_to_left
 
-      # 2) Pick a random start height
-      y = @viewport[:y] + rand * @viewport[:h]
+      if direction == :left_to_right
+        x_start = @viewport[:x] - @bird[:w]
+        x_end = @viewport[:x] + @viewport[:w] * 2.0
+      else
+        x_start = @viewport[:x] + @viewport[:w] * 2.0
+        x_end = @viewport[:x] - @bird[:w]
+      end
 
-      # 3) Control points
-      control_x1 = (x + @player[:x] - @player[:w]) / 2
-      control_y1 = (y + @player[:y] - @player[:h]) / 2
-      control_x2 = @player[:x] - @player[:w]
-      control_y2 = @player[:y] - @player[:h]
+      # Pick a random start height
+      y_start = @viewport[:y] + rand * @viewport[:h]
 
-      # 4) End point
-      x2 = @viewport[:x] - @viewport[:w] # path length = viewport[:w] * 2
-      y2 = @viewport[:y] + rand * @viewport[:h]
+      # Predict the player's future position
+      time_interval = 2.0 # Adjust this value as needed
+      predicted_player_x = @player[:x] + @player[:vx] * time_interval
+      predicted_player_y = @player[:y] + @player[:vy] * time_interval
 
-      # 5) Generate a spline path that intersects with the player
-      points = bezier(x, y, control_x1, control_y1, control_x2, control_y2, x2, y2, 20)
+      # Control points
+      control_x1 = (x_start + predicted_player_x - @player[:w]) / 2
+      control_y1 = (y_start + predicted_player_y - @player[:h]) / 2
+      control_x2 = predicted_player_x - @player[:w]
+      control_y2 = predicted_player_y - @player[:h]
+
+      # Pick a random end height
+      y_end = @viewport[:y] + rand * @viewport[:h]
+
+      # Generate a spline path that intersects with the predicted player position
+      points = bezier(x_start, y_start, control_x1, control_y1, control_x2, control_y2, x_end, y_end, 20)
 
       @birds << @bird.merge(
-        x: x,
-        y: y,
+        x: x_start,
+        y: y_start,
         points: points,
-        spline: [[x, control_x1, control_x2, x2], [y, control_y1, control_y2, y2]]
-      )
+        spline: [[x_start, control_x1, control_x2, x_end], [y_start, control_y1, control_y2, y_end]],
+        frame: 1,
+        flip_vertically: direction == :right_to_left
+        )
     end
   end
 
@@ -679,17 +693,29 @@ class Game
       bird[:progress] ||= 0
       bird[:progress] += 0.005 # speed
 
-      bird[:progress] = 1 if bird[:progress] >= 1
+      if bird[:progress] < 1
+        # Follow the spline path
+        spline_x, spline_y = bird[:spline]
+        bird[:x] = b_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
+        bird[:y] = b_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
+        dx = derivative_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
+        dy = derivative_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
+        bird[:angle] = Math.atan2(dy, dx) * (180 / Math::PI)
+        bird[:vx] = dx * 0.005 # velocity vector scaled by speed factor
+        bird[:vy] = dy * 0.005
+      else
+        # Continue in the current direction with the calculated velocity
+        bird[:x] += bird[:vx]
+        bird[:y] += bird[:vy]
+      end
 
-      spline_x, spline_y = bird[:spline]
-      bird[:x] = b_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
-      bird[:y] = b_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
-      dx = derivative_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
-      dy = derivative_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
-      bird[:angle] = Math.atan2(dy, dx) * (180 / Math::PI)
+      bird[:frame] = 0.frame_index(count: 8, tick_count_override: @clock, hold_for: 3, repeat: true)
 
-      # Remove when offscreen
-      bird[:progress] == 1
+      # Remove when offscreen by 3x viewport size in either direction
+      bird[:x] < @viewport[:x] - bird[:w] - 3 * @viewport[:w] ||
+        bird[:x] > @viewport[:x] + 2 * @viewport[:w] + bird[:w] ||
+        bird[:y] < @viewport[:y] - bird[:h] - 3 * @viewport[:h] ||
+        bird[:y] > @viewport[:y] + 2 * @viewport[:h] + bird[:h]
     end
   end
 
@@ -701,7 +727,7 @@ class Game
                         y_to_screen(bird[:y]), # y
                         bird[:w] * @camera[:zoom], # w
                         bird[:h] * @camera[:zoom], # h
-                        bird[:path], # path
+                        "sprites/bird/frame-#{bird[:frame] + 1}.png", # path
                         bird[:angle], # angle
                         nil, # alpha
                         nil, # r
@@ -712,7 +738,7 @@ class Game
                         nil, # tile_w
                         nil, # tile_h
                         false, # flip_horizontally
-                        true, # flip_vertically
+                        bird[:flip_vertically], # flip_vertically
                         nil, # angle_anchor_x
                         nil, # angle_anchor_y
                         nil, # source_x
