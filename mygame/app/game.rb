@@ -127,6 +127,7 @@ class Game
 
     # Calc birds
     try_create_bird
+    calc_birds
 
     # Handle collision
     handle_wall_collision
@@ -147,6 +148,8 @@ class Game
     draw_maze(ffi)
     draw_items(ffi)
     draw_player(ffi)
+
+    draw_birds(ffi)
 
     draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
   end
@@ -552,20 +555,148 @@ class Game
     end
   end
 
+  def bezier(x, y, x2, y2, x3, y3, x4, y4, step)
+    step ||= 0
+    color = [200, 200, 200]
+    points = points_for_bezier [x, y], [x2, y2], [x3, y3], [x4, y4], step
+
+    points.each_cons(2).map do |p1, p2|
+      [p1, p2, color]
+    end
+  end
+
+  def points_for_bezier(p1, p2, p3, p4, step)
+    if step == 0
+      [p1, p2, p3, p4]
+    else
+      t_step = 1.fdiv(step + 1)
+      t = 0
+      t += t_step
+      points = []
+      while t < 1
+        points << [
+          b_for_t(p1.x, p2.x, p3.x, p4.x, t),
+          b_for_t(p1.y, p2.y, p3.y, p4.y, t),
+        ]
+        t += t_step
+      end
+
+      [
+        p1,
+        *points,
+        p4
+      ]
+    end
+  end
+
+  def b_for_t(v0, v1, v2, v3, t)
+    (1 - t) ** 3 * v0 +
+      3 * (1 - t) ** 2 * t * v1 +
+      3 * (1 - t) * t ** 2 * v2 +
+      t ** 3 * v3
+  end
+
+  def derivative_for_t(v0, v1, v2, v3, t)
+    -3 * (1 - t) ** 2 * v0 +
+      3 * (1 - t) ** 2 * v1 - 6 * (1 - t) * t * v1 +
+      6 * (1 - t) * t * v2 - 3 * t ** 2 * v2 +
+      3 * t ** 2 * v3
+  end
+
   def try_create_bird
-    @bird ||= { w: 48, h: 32, r: 0, g: 255, b: 0, anchor_x: 0.5, anchor_y: 0.5, primitive_marker: :solid }
+    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', anchor_x: 0.5, anchor_y: 0.5 }
     @birds ||= []
 
     if args.state.tick_count % @bird_spawn_interval == 0
+      # 1) Pick left or right side of screen
+      x = @viewport[:x] + @viewport[:w]
+
+      # 2) Pick a random start height
+      y = @viewport[:y] + rand * @viewport[:h]
+
+      # 3) Control points
+      control_x1 = (x + @player[:x] - @player[:w]) / 2
+      control_y1 = (y + @player[:y] - @player[:h]) / 2
+      control_x2 = @player[:x] - @player[:w]
+      control_y2 = @player[:y] - @player[:h]
+
+      # 4) End point
+      x2 = @viewport[:x] - @viewport[:w] # path length = viewport[:w] * 2
+      y2 = @viewport[:y] + rand * @viewport[:h]
+
+      # 5) Generate a spline path that intersects with the player
+      points = bezier(x, y, control_x1, control_y1, control_x2, control_y2, x2, y2, 20)
+
       @birds << @bird.merge(
-        x: rand * @screen_width,
-        y: rand * @screen_height,
+        x: x,
+        y: y,
+        points: points,
+        spline: [[x, control_x1, control_x2, x2], [y, control_y1, control_y2, y2]]
       )
     end
   end
 
-  def draw_birds
+  def calc_birds
+    @birds.reject! do |bird|
+      bird[:progress] ||= 0
+      bird[:progress] += 0.007 # speed
 
+      bird[:progress] = 1 if bird[:progress] >= 1
+
+      spline_x, spline_y = bird[:spline]
+      bird[:x] = b_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
+      bird[:y] = b_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
+      dx = derivative_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
+      dy = derivative_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
+      bird[:angle] = Math.atan2(dy, dx) * (180 / Math::PI)
+
+      # Remove when offscreen
+      bird[:progress] == 1
+    end
+  end
+
+  def draw_birds(ffi)
+    return if @birds.empty?
+
+    @birds.each do |bird|
+      ffi.draw_sprite_5(x_to_screen(bird[:x]), # x
+                        y_to_screen(bird[:y]), # y
+                        bird[:w] * @camera[:zoom], # w
+                        bird[:h] * @camera[:zoom], # h
+                        bird[:path], # path
+                        bird[:angle], # angle
+                        nil, # alpha
+                        nil, # r
+                        nil, # g,
+                        nil, # b
+                        nil, # tile_x
+                        nil, # tile_y
+                        nil, # tile_w
+                        nil, # tile_h
+                        false, # flip_horizontally
+                        true, # flip_vertically
+                        nil, # angle_anchor_x
+                        nil, # angle_anchor_y
+                        nil, # source_x
+                        nil, # source_y
+                        nil, # source_w,
+                        nil, # source_h
+                        nil, # blendmode_enum
+                        0.5, # anchor_x
+                        0.5) # anchor_y
+
+
+      # [Debug] draw path
+      bird[:points].each do |l|
+        x, y = l[0]
+        x2, y2 = l[1]
+        ffi.draw_line_2 x_to_screen(x), y_to_screen(y),
+                        x_to_screen(x2),
+                        y_to_screen(y2),
+                        0, 0, 0, 255,
+                        1
+      end
+    end
   end
 
   def draw_player(ffi)
@@ -662,10 +793,11 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.1,
+      gain: 0.0, # 0.1 is reasonably balanced
       paused: true,
       looping: true
     }
+
     audio[:wind] = {
       input: 'sounds/Wind.ogg',
       x: 0.0,
@@ -713,7 +845,7 @@ class Game
     create_items
 
     # Birds
-    @bird_spawn_interval = 480
+    @bird_spawn_interval = 120
 
     # Configure wind
     @wind_gain_multiplier = 7.0
