@@ -43,7 +43,7 @@ class Game
     end
 
     @timer = (21 - @clock / 60.0).to_i
-    draw_timer
+    draw_hud
 
     if @timer <= 0
       @current_scene = :tick_game_over_scene
@@ -74,16 +74,55 @@ class Game
 
     @player[:vx] = (@player[:vx] + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
     @player[:vy] = (@player[:vy] + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+
+    # Check if the spacebar is pressed and 3 seconds have passed since the last boost
+    if inputs.keyboard.key_down.space && (args.state.tick_count - @player[:last_boost_time]) >= 180  # 180 ticks = 3 seconds
+      player_boost
+      @last_boost_time = args.state.tick_count
+    end
+
     @player_flip = false if dx > 0
     @player_flip = true if dx < 0
   end
 
+  def player_boost
+    return if @player[:boosting]
+    return if @player[:coins] == 0
+
+    @player[:coins] -= 1
+
+    @player[:boosting] = true
+    @player[:boost_remaining] = @player[:boost_duration]
+
+    magnitude = Math.sqrt(@player[:vx]**2 + @player[:vy]**2)
+    return if magnitude == 0
+
+    @player[:dx] = @player[:vx] / magnitude
+    @player[:dy] = @player[:vy] / magnitude
+
+
+  end
+
   def calc_player
-    @player[:y] += @player[:rising]
+    # Slowly increase upward velocity
+    @player[:vy] += @player[:rising]
+
     @player[:x] += @player[:vx]
     @player[:y] += @player[:vy]
     @player[:vx] *= @player[:damping]
     @player[:vy] *= @player[:damping]
+
+
+    if @player[:boosting]
+      boost_increment = @player[:boost] / @player[:boost_duration]
+      @player[:vx] += @player[:dx] * boost_increment
+      @player[:vy] += @player[:dy] * boost_increment
+      @player[:boost_remaining] -= 1
+
+      if @player[:boost_remaining] <= 0
+        @player[:boosting] = false
+      end
+    end
 
     # Warp player
     if (@player[:x] - @player[:w] * 0.5) < 0
@@ -411,7 +450,8 @@ class Game
     }
   end
 
-  def draw_timer
+  def draw_hud
+    # Timer
     args.outputs.labels << {
       x: @screen_width - 20,
       y: @screen_height - 40,
@@ -433,6 +473,41 @@ class Game
       b: 255,
       font: 'fonts/Chango-Regular.ttf'
     }
+
+    # Coins
+    outputs.labels << {
+      x: @screen_width * 0.5,
+      y: @screen_height - 40,
+      text: "#{@player[:coins]}",
+      anchor_x: 0.5,
+      anchor_y: 1.0,
+      size_enum: 16,
+      font: 'fonts/Chango-Regular.ttf'
+    }
+    outputs.labels << {
+      x: @screen_width * 0.5,
+      y: @screen_height - 38,
+      text: "#{@player[:coins]}",
+      anchor_x: 0.5,
+      anchor_y: 1.0,
+      size_enum: 16,
+      r: 255,
+      g: 255,
+      b: 0,
+      font: 'fonts/Chango-Regular.ttf'
+    }
+
+    coins_w, coins_h = GTK.calcstringbox("#{@player[:coins]}", 16, 'fonts/Chango-Regular.ttf')
+    outputs.primitives << {
+      x: @screen_width * 0.5 - coins_w - 16,
+      y: @screen_height - coins_h - 15,
+      w: coins_h * 0.5,
+      h: coins_h * 0.5,
+      anchor_y: 0.5,
+      anchor_x: 0.0,
+      path: 'sprites/coin.png',
+      primitive_marker: :sprite,
+    }
   end
 
   def handle_wall_collision
@@ -441,12 +516,17 @@ class Game
     player_half_w = @player[:w] * 0.5
     player_half_h = @player[:h] * 0.5
 
-    GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree).concat(
-      GTK::Geometry.find_all_intersect_rect_quad_tree(@wrapped_viewport, @maze_colliders_quad_tree).map do |wall|
-        wall.merge(x: wall[:x] - @maze_width * @maze_cell_w)
-      end
-    ).each do |collision|
+    walls = GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree)
 
+    if @wrapped_viewport
+      maze_world_width = @maze_width * @maze_cell_w
+      shifted_position = player_mid_x + (@wrapped_viewport[:position] == :left ? maze_world_width : -maze_world_width)
+      walls.concat(GTK::Geometry.find_all_intersect_rect_quad_tree(@player.merge(x: shifted_position), @maze_colliders_quad_tree).map do |wall|
+        wall.merge(x: wall[:x] - @maze_width * @maze_cell_w)
+      end)
+    end
+
+    walls.each do |collision|
       collision_mid_x = collision[:x] + collision[:w] * 0.5
       collision_mid_y = collision[:y] + collision[:h] * 0.5
       collision_half_w = collision[:w] * 0.5
@@ -486,7 +566,7 @@ class Game
     GTK::Geometry.find_all_intersect_rect(@player, @items).each do |item|
       if item[:item_type] == :coin
         args.audio[:coin] = { input: "sounds/coin.wav", gain: 0.1 }
-        @player[:score] += 1
+        @player[:coins] += 1
         @items.delete(item)
       end
     end
@@ -751,6 +831,7 @@ class Game
 
 
       # [Debug] draw path
+=begin
       bird[:points].each do |l|
         x, y = l[0]
         x2, y2 = l[1]
@@ -760,6 +841,7 @@ class Game
                         0, 0, 0, 255,
                         1
       end
+=end
     end
   end
 
@@ -841,13 +923,22 @@ class Game
       anchor_y: 0.5,
       flip_horizontally: false,
 
-      score: 0,
+      coins: 0,
+
+      # Boost
+      dx: 0.0,
+      dy: 0.0,
+      boost: 80.0,
+      boosting: false,
+      boost_remaining: 0,
+      boost_duration: 120, # in ticks
+      last_boost_time: -Float::INFINITY,
 
       # Physics
       vx: 0.0,
       vy: 0.0,
       speed: 2.0,
-      rising: 0.0,
+      rising: 0.1,
       damping: 0.95,
       max_speed: 10.0,
     }
@@ -908,7 +999,7 @@ class Game
     create_items
 
     # Birds
-    @bird_spawn_interval = 120
+    @bird_spawn_interval = 60
 
     # Configure wind
     @wind_gain_multiplier = 7.0
