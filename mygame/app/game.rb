@@ -51,6 +51,7 @@ class Game
     if @timer <= 0
       @current_scene = :tick_game_over_scene
     end
+
   end
 
   def tick_game_over_scene
@@ -66,7 +67,8 @@ class Game
     return if game_has_lost_focus?
 
     dx = inputs.left_right_perc
-    dy = inputs.up_down_perc
+    dy = @player[:falling] ? 0.0 : inputs.up_down_perc
+
 
     # Normalize the input so diagonal movements aren't faster
     if dx != 0 || dy != 0
@@ -102,13 +104,16 @@ class Game
 
     @player[:dx] = @player[:vx] / magnitude
     @player[:dy] = @player[:vy] / magnitude
-
-
   end
 
   def calc_player
     # Slowly increase upward velocity
-    @player[:vy] += @player[:rising]
+    if @player[:helium] > 0
+      @player[:vy] += @player[:rising]
+    else
+      @player[:falling] = true
+      @player[:vy] -= @player[:rising]
+    end
 
     @player[:x] += @player[:vx]
     @player[:y] += @player[:vy]
@@ -139,6 +144,9 @@ class Game
       @camera[:x] -= @maze_width * @maze_cell_w
       @camera_teleport_offset[:x] += @maze_width * @maze_cell_w
     end
+
+    # Decrement helium
+    @player[:helium] = (@player[:helium] - 0.15).clamp(0, 100)
   end
 
   def calc_camera
@@ -514,6 +522,33 @@ class Game
       path: 'sprites/coin.png',
       primitive_marker: :sprite,
     }
+
+    # Helium bar
+    args.outputs.primitives << {
+      x: @screen_width * 0.5,
+      y: 20,
+      w: @screen_width * 0.75,
+      h: 20,
+      r: 200,
+      g: 200,
+      b: 200,
+      a: 64,
+      anchor_x: 0.5,
+      primitive_marker: :solid
+    }
+
+    args.outputs.primitives << {
+      x: @screen_width * 0.5,
+      y: 20,
+      w: (@screen_width * 0.75 * @player[:helium] * 0.01).clamp(0, @screen_width * 0.75), # divide player helium by 100
+      h: 20,
+      r: 0,
+      g: 255,
+      b: 0,
+      a: 64,
+      anchor_x: 0.5,
+      primitive_marker: :solid
+    }
   end
 
   def handle_wall_collision
@@ -575,6 +610,12 @@ class Game
         @player[:coins] += 1
         @items.delete(item)
       end
+      if item[:item_type] == :helium
+        puts 'helium'
+        #args.audio[:coin] = { input: "sounds/coin.wav", gain: 1.5 }
+        @player[:helium] = 100
+        @items.delete(item)
+      end
     end
   end
 
@@ -584,7 +625,6 @@ class Game
 
       @player[:coins] -= 1
       bird[:has_coin] = true
-
 
       args.audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
     end
@@ -623,9 +663,45 @@ class Game
     end
   end
 
+  def create_helium
+    image_w, image_h = gtk.calcspritebox("sprites/helium.png")
+
+    canister = { w: image_w * 0.1, h: image_h * 0.1, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/helium.png', item_type: :helium, primitive_marker: :sprite }
+
+    max_canisters_per_cell = 1
+    canister_chance_per_cell = 0.1
+
+    @canisters = []
+
+    @maze.each do |row|
+      row.each do |cell|
+        max_canisters_per_cell.times do
+          next unless rand < canister_chance_per_cell
+
+          loop do
+            quantized_x = (cell[:col] * @maze_cell_w + @wall_thickness + canister[:w] * 0.5 + rand(@maze_cell_w - 2 * @wall_thickness) - canister[:w] * 0.5) / @wall_thickness * @wall_thickness
+            quantized_y = (cell[:row] * @maze_cell_h + @wall_thickness + canister[:h] * 0.5 + rand(@maze_cell_h - 3 * @wall_thickness) - canister[:h] * 0.5) / @wall_thickness * @wall_thickness
+
+            new_canister = canister.merge(x: quantized_x, y: quantized_y)
+
+            # Check for overlap
+            overlap = @canisters.any? do |existing_coin|
+              (existing_coin[:x] - new_canister[:x]).abs < @wall_thickness && (existing_coin[:y] - new_canister[:y]).abs < @wall_thickness
+            end
+
+            unless overlap
+              @canisters << new_canister
+              break
+            end
+          end
+        end
+      end
+    end
+  end
+
   def create_items
     # TODO: add additional item arrays
-    @items = [].concat(@coins)
+    @items = [].concat(@coins).concat(@canisters)
   end
 
   def draw_items(ffi)
@@ -676,7 +752,7 @@ class Game
                           nil, # tile_y
                           nil, # tile_w
                           nil, # tile_h
-                          @player_flip, # flip_horizontally
+                          nil, # flip_horizontally
                           nil, # flip_vertically
                           nil, # angle_anchor_x
                           nil, # angle_anchor_y
@@ -1022,6 +1098,9 @@ class Game
       flip_horizontally: false,
 
       coins: 0,
+      helium: 100,
+
+      falling: false,
 
       # Boost
       dx: 0.0,
@@ -1101,6 +1180,7 @@ class Game
     @bg_parallax = 0.3
 
     # Create Items
+    create_helium
     create_coins
     create_items
 
