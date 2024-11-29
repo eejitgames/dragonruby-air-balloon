@@ -183,6 +183,7 @@ class Game
     # Handle collision
     handle_wall_collision
     handle_item_collision
+    handle_bird_collision
 
     # Calc Wind
     new_wind_gain = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) * @wind_gain_multiplier
@@ -577,6 +578,18 @@ class Game
     end
   end
 
+  def handle_bird_collision
+    GTK::Geometry.find_all_intersect_rect(@player, @birds).each do |bird|
+      next unless @player[:coins] > 0
+
+      @player[:coins] -= 1
+      bird[:has_coin] = true
+
+
+      args.audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
+    end
+  end
+
   def create_coins
     coin = { w: 32, h: 32, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/coin.png', primitive_marker: :sprite }
 
@@ -727,7 +740,7 @@ class Game
   end
 
   def try_create_bird
-    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', anchor_x: 0.5, anchor_y: 0.5 }
+    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', anchor_x: 0.5, anchor_y: 0.5, has_coin: false }
 
     interval = @bird_spawn_interval + (rand(2 * @bird_spawn_variance + 1) - @bird_spawn_variance)
 
@@ -853,6 +866,13 @@ class Game
                         0.5, # anchor_x
                         0.5) # anchor_y
 
+      if bird[:has_coin]
+        ffi.draw_sprite(x_to_screen(bird[:x]),      # x
+                        y_to_screen(bird[:y] - 32), # y
+                        32 * @camera[:zoom],        # w
+                        32 * @camera[:zoom],        # h
+                        'sprites/coin.png')         # path
+      end
 
       # [Debug] draw path
       if @draw_bird_paths
@@ -897,6 +917,14 @@ class Game
                           nil, # blendmode_enum
                           0.5, # anchor_x
                           0.5) # anchor_y
+
+        if bird[:has_coin]
+          ffi.draw_sprite(x_to_screen(wrapped_x),     # x
+                          y_to_screen(bird[:y] - 32), # y
+                          32 * @camera[:zoom],        # w
+                          32 * @camera[:zoom],        # h
+                          'sprites/coin.png')         # path
+        end
 
         # [Debug] draw wrapped path
         if @draw_bird_paths
