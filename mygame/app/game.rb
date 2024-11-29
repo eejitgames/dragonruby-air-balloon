@@ -18,10 +18,13 @@ class Game
   end
 
   def tick_title_scene
+    audio[:menu_music].paused = false
+
     outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
+      audio[:menu_music].paused = true
       audio[:music].paused = false
       audio[:wind].paused = false
       @clock = 0
@@ -260,7 +263,7 @@ class Game
     @maze = Maze.prepare_grid(@maze_height, @maze_width)
     Maze.on(@maze)
 
-    collider = { r: 32, g: 255, b: 32, a: 32, primitive_marker: :solid }
+    collider = { r: 255, g: 255, b: 255, a: 64, primitive_marker: :solid }
 
     # Create collision rects for maze
     maze_colliders = @maze.flat_map do |row|
@@ -567,7 +570,7 @@ class Game
   def handle_item_collision
     GTK::Geometry.find_all_intersect_rect(@player, @items).each do |item|
       if item[:item_type] == :coin
-        args.audio[:coin] = { input: "sounds/coin.wav", gain: 0.1 }
+        args.audio[:coin] = { input: "sounds/coin.wav", gain: 1.5 }
         @player[:coins] += 1
         @items.delete(item)
       end
@@ -1010,12 +1013,20 @@ class Game
       max_speed: 10.0,
     }
 
-    audio[:music] = {
+    audio[:menu_music] = {
+      input: 'sounds/InGameTheme20secGJ.ogg',
+      gain: 0.8,
+      paused: false,
+      looping: true,
+    }
+
+    audio[:music] =
+      {
       input: 'sounds/up-up-and-away-sketch.ogg',
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.0, # 0.1 is reasonably balanced
+      gain: 0.7, # 0.1 is reasonably balanced
       paused: true,
       looping: true
     }
@@ -1071,8 +1082,8 @@ class Game
     @bird_spawn_variance = 60
 
     # Configure wind
-    @wind_gain_multiplier = 7.0
-    @wind_gain_speed = 0.2
+    @wind_gain_multiplier = 1.0
+    @wind_gain_speed = 0.5
 
     # Configure clouds
     @cloud_bounciness = 0.75 # 0..1 representing energy loss on bounce
