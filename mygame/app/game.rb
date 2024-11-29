@@ -92,9 +92,6 @@ class Game
 
   def player_boost
     return if @player[:boosting]
-    return if @player[:coins] == 0
-
-    @player[:coins] -= 1
 
     @player[:boosting] = true
     @player[:boost_remaining] = @player[:boost_duration]
@@ -104,6 +101,8 @@ class Game
 
     @player[:dx] = @player[:vx] / magnitude
     @player[:dy] = @player[:vy] / magnitude
+
+    @player[:trail] = []
   end
 
   def calc_player
@@ -127,8 +126,13 @@ class Game
       @player[:vy] += @player[:dy] * boost_increment
       @player[:boost_remaining] -= 1
 
+      # Speed trail effect
+      @player[:trail] << { x: @player[:x], y: @player[:y] }
+      @player[:trail].shift if @player[:trail].length > 10
+
       if @player[:boost_remaining] <= 0
         @player[:boosting] = false
+        @player[:trail].clear
       end
     end
 
@@ -206,6 +210,7 @@ class Game
     draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png', ffi)
 
     draw_maze(ffi)
+    draw_goal(ffi)
     draw_items(ffi)
     draw_player(ffi)
 
@@ -330,6 +335,28 @@ class Game
                        wall[:b],
                        wall[:a])
       end
+    end
+  end
+
+  def draw_goal(ffi)
+    ffi.draw_solid(x_to_screen(@goal[:x]),
+                   y_to_screen(@goal[:y]),
+                   @goal[:w] * @camera[:zoom],
+                   @goal[:h] * @camera[:zoom],
+                   @goal[:r],
+                   @goal[:g],
+                   @goal[:b],
+                   @goal[:a])
+
+    if @wrapped_viewport
+      ffi.draw_solid(x_to_screen(@goal[:x] - @maze_width * @maze_cell_w),
+                     y_to_screen(@goal[:y]),
+                     @goal[:w] * @camera[:zoom],
+                     @goal[:h] * @camera[:zoom],
+                     @goal[:r],
+                     @goal[:g],
+                     @goal[:b],
+                     @goal[:a])
     end
   end
 
@@ -464,6 +491,19 @@ class Game
     }
   end
 
+  def create_goal
+    @goal = {
+      x: @maze_width * @maze_cell_w - @wall_thickness - @maze_cell_w * 0.5,
+      y: @maze_height * @maze_cell_h - @wall_thickness - @maze_cell_h * 0.5,
+      w: 128,
+      h: 128,
+      r: 255,
+      g: 0,
+      b: 0,
+      a: 128,
+      primitive_marker: :solid
+    }
+  end
   def draw_hud
     # Timer
     args.outputs.labels << {
@@ -489,6 +529,7 @@ class Game
     }
 
     # Coins
+=begin
     outputs.labels << {
       x: @screen_width * 0.5,
       y: @screen_height - 40,
@@ -522,6 +563,7 @@ class Game
       path: 'sprites/coin.png',
       primitive_marker: :sprite,
     }
+=end
 
     # Helium bar
     args.outputs.primitives << {
@@ -633,8 +675,8 @@ class Game
   def create_coins
     coin = { w: 32, h: 32, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/coin.png', primitive_marker: :sprite }
 
-    @max_coins_per_cell = 2
-    @coin_chance_per_cell = 0.5
+    @max_coins_per_cell = 8
+    @coin_chance_per_cell = 0.3
     @coins = []
 
     @maze.each do |row|
@@ -701,7 +743,7 @@ class Game
 
   def create_items
     # TODO: add additional item arrays
-    @items = [].concat(@coins).concat(@canisters)
+    @items = [].concat(@canisters)
   end
 
   def draw_items(ffi)
@@ -1047,6 +1089,38 @@ class Game
                       nil, # blendmode_enum
                       0.5, # anchor_x
                       0.5) # anchor_y
+
+
+    if @player[:trail]
+      @player[:trail].each_with_index do |pos, index|
+        alpha = 255 * (Math.log(index + 1) / Math.log(@player[:trail].length + 1))
+        ffi.draw_sprite_5(x_to_screen(pos[:x]),  # x
+                          y_to_screen(pos[:y]),  # y
+                          @player[:w] * @camera[:zoom],  # w
+                          @player[:h] * @camera[:zoom],  # h
+                          "sprites/balloon_#{player_sprite_index + 1}.png",  # path
+                          nil,  # angle
+                          alpha,  # alpha
+                          nil,  # r
+                          nil,  # g,
+                          nil,  # b
+                          nil,  # tile_x
+                          nil,  # tile_y
+                          nil,  # tile_w
+                          nil,  # tile_h
+                          @player_flip,  # flip_horizontally
+                          nil,  # flip_vertically
+                          nil,  # angle_anchor_x
+                          nil,  # angle_anchor_y
+                          nil,  # source_x
+                          nil,  # source_y
+                          nil,  # source_w,
+                          nil,  # source_h
+                          nil,  # blendmode_enum
+                          0.5,  # anchor_x
+                          0.5)  # anchor_y
+      end
+    end
   end
 
   def x_to_screen(x)
@@ -1088,9 +1162,11 @@ class Game
     @screen_width = 720
     @wall_thickness = 48
 
+    player_w = 120
+    player_h = 176
     @player = {
-      x: @wall_thickness * 2.0,
-      y: @wall_thickness * 2.0,
+      x: player_w + @wall_thickness,
+      y: player_h + @wall_thickness,
       w: 120,
       h: 176,
       anchor_x: 0.5,
@@ -1155,6 +1231,9 @@ class Game
     @maze_height = 10
     create_maze
 
+    # Create Goal
+    create_goal
+
     # Create Minimap
     @minimap_cell_size = 16
     @minimap_width = @maze_width * @minimap_cell_size
@@ -1167,7 +1246,7 @@ class Game
       y: 0.0,
       offset_x: 0.5,
       offset_y: 0.2,
-      zoom: 1.0,
+      zoom: 0.6,
       zoom_speed: 0.05,
       lag: 0.05,
     }
@@ -1181,7 +1260,7 @@ class Game
 
     # Create Items
     create_helium
-    create_coins
+    #create_coins
     create_items
 
     # Birds
