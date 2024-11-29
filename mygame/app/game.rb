@@ -425,6 +425,8 @@ class Game
     @minimap_revealed ||= false
     @minimap_revealed = !@minimap_revealed if args.inputs.keyboard.key_up.r && !args.gtk.production?
 
+    @draw_bird_paths = !@draw_bird_paths if args.inputs.keyboard.key_up.p && !args.gtk.production?
+
     if @minimap_revealed
       outputs[:primitives] << {
         x: 0,
@@ -723,17 +725,18 @@ class Game
 
   def try_create_bird
     @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', anchor_x: 0.5, anchor_y: 0.5 }
-    @birds ||= []
 
-    if args.state.tick_count % @bird_spawn_interval == 0
+    interval = @bird_spawn_interval + (rand(2 * @bird_spawn_variance + 1) - @bird_spawn_variance)
+
+    if args.state.tick_count % interval.to_i == 0
       # Determine direction randomly
       direction = rand < 0.5 ? :left_to_right : :right_to_left
 
       if direction == :left_to_right
         x_start = @viewport[:x] - @bird[:w]
-        x_end = @viewport[:x] + @viewport[:w] * 2.0
+        x_end = @viewport[:x] + @viewport[:w] + @bird[:w]
       else
-        x_start = @viewport[:x] + @viewport[:w] * 2.0
+        x_start = @viewport[:x] + @viewport[:w] + @bird[:w]
         x_end = @viewport[:x] - @bird[:w]
       end
 
@@ -771,7 +774,7 @@ class Game
   def calc_birds
     @birds.reject! do |bird|
       bird[:progress] ||= 0
-      bird[:progress] += 0.005 # speed
+      bird[:progress] += 0.004 # speed
 
       if bird[:progress] < 1
         # Follow the spline path
@@ -789,14 +792,32 @@ class Game
         bird[:y] += bird[:vy]
       end
 
+      # Wrap bird position around the maze
+      if bird[:x] < 0
+        bird[:x] += @maze_width * @maze_cell_w
+      elsif bird[:x] > @maze_width * @maze_cell_w
+        bird[:x] -= @maze_width * @maze_cell_w
+      end
+
+
       bird[:frame] = 0.frame_index(count: 8, tick_count_override: @clock, hold_for: 3, repeat: true)
 
-      # Remove when offscreen by 3x viewport size in either direction
-      bird[:x] < @viewport[:x] - bird[:w] - 3 * @viewport[:w] ||
-        bird[:x] > @viewport[:x] + 2 * @viewport[:w] + bird[:w] ||
-        bird[:y] < @viewport[:y] - bird[:h] - 3 * @viewport[:h] ||
-        bird[:y] > @viewport[:y] + 2 * @viewport[:h] + bird[:h]
+      # Calculate the wrapped distance from the player
+      wrapped_bird_x = bird[:x]
+      wrapped_bird_y = bird[:y]
+
+      if (bird[:x] - @player[:x]).abs > @screen_width
+        wrapped_bird_x = bird[:x] > @player[:x] ? bird[:x] - @maze_width * @maze_cell_w : bird[:x] + @maze_width * @maze_cell_w
+      end
+
+      if (bird[:y] - @player[:y]).abs > @screen_height
+        wrapped_bird_y = bird[:y] > @player[:y] ? bird[:y] - @maze_height * @maze_cell_h : bird[:y] + @maze_height * @maze_cell_h
+      end
+
+      distance = Math.sqrt((wrapped_bird_x - @player[:x])**2 + (wrapped_bird_y - @player[:y])**2)
+      distance > @screen_height * 2
     end
+
   end
 
   def draw_birds(ffi)
@@ -831,17 +852,63 @@ class Game
 
 
       # [Debug] draw path
-=begin
-      bird[:points].each do |l|
-        x, y = l[0]
-        x2, y2 = l[1]
-        ffi.draw_line_2 x_to_screen(x), y_to_screen(y),
-                        x_to_screen(x2),
-                        y_to_screen(y2),
-                        0, 0, 0, 255,
-                        1
+      if @draw_bird_paths
+        bird[:points].each do |l|
+          x, y = l[0]
+          x2, y2 = l[1]
+          ffi.draw_line_2 x_to_screen(x), y_to_screen(y),
+                          x_to_screen(x2),
+                          y_to_screen(y2),
+                          0, 0, 0, 255,
+                          1
+        end
       end
-=end
+
+      # If the bird is within the wrapped viewport, draw it in its wrapped position
+      if @wrapped_viewport
+        map_w = @maze_width * @maze_cell_w
+        wrapped_x = bird[:x] + (@wrapped_viewport[:position] == :left ? -map_w : map_w)
+
+        ffi.draw_sprite_5(x_to_screen(wrapped_x), # x
+                          y_to_screen(bird[:y]), # y
+                          bird[:w] * @camera[:zoom], # w
+                          bird[:h] * @camera[:zoom], # h
+                          "sprites/bird/frame-#{bird[:frame] + 1}.png", # path
+                          bird[:angle], # angle
+                          nil, # alpha
+                          nil, # r
+                          nil, # g,
+                          nil, # b
+                          nil, # tile_x
+                          nil, # tile_y
+                          nil, # tile_w
+                          nil, # tile_h
+                          false, # flip_horizontally
+                          bird[:flip_vertically], # flip_vertically
+                          nil, # angle_anchor_x
+                          nil, # angle_anchor_y
+                          nil, # source_x
+                          nil, # source_y
+                          nil, # source_w,
+                          nil, # source_h
+                          nil, # blendmode_enum
+                          0.5, # anchor_x
+                          0.5) # anchor_y
+
+        # [Debug] draw wrapped path
+        if @draw_bird_paths
+          bird[:points].each do |l|
+            x, y = l[0]
+            x2, y2 = l[1]
+            wrapped_x1 = x + (@wrapped_viewport[:position] == :left ? -map_w : map_w)
+            wrapped_x2 = x2 + (@wrapped_viewport[:position] == :left ? -map_w : map_w)
+
+            ffi.draw_line_2 x_to_screen(wrapped_x1), y_to_screen(y),
+                            x_to_screen(wrapped_x2), y_to_screen(y2),
+                            0, 0, 0, 255, 1
+          end
+        end
+      end
     end
   end
 
@@ -999,7 +1066,9 @@ class Game
     create_items
 
     # Birds
-    @bird_spawn_interval = 60
+    @birds = []
+    @bird_spawn_interval = 100
+    @bird_spawn_variance = 60
 
     # Configure wind
     @wind_gain_multiplier = 7.0
