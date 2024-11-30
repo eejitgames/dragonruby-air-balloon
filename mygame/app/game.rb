@@ -696,14 +696,9 @@ class Game
 
   def handle_item_collision
     GTK::Geometry.find_all_intersect_rect(@player, @items).each do |item|
-      if item[:item_type] == :coin
-        args.audio[:coin] = { input: "sounds/coin.wav", gain: 1.5 }
-        @player[:coins] += 1
-        @items.delete(item)
-      end
       if item[:item_type] == :helium
         puts 'helium'
-        #args.audio[:coin] = { input: "sounds/coin.wav", gain: 1.5 }
+        args.audio[:hiss] = { input: "sounds/hiss.ogg", gain: 1.0 }
         @player[:helium] = 100
         @items.delete(item)
       end
