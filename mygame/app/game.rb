@@ -685,6 +685,11 @@ class Game
   end
 
   def handle_bird_collision
+    player_x = @player[:x]
+    player_y = @player[:y]
+    player_half_w = @player[:w] * 0.5
+    player_half_h = @player[:h] * 0.5
+
     @current_bird_collisions ||= {}
     current_collisions = GTK::Geometry.find_all_intersect_rect(@player, @birds)
 
@@ -702,6 +707,48 @@ class Game
         @camera[:trauma] += trauma
       end
 
+      collision_mid_x = bird[:x]
+      collision_mid_y = bird[:y]
+      collision_half_w = bird[:w] * 0.5
+      collision_half_h = bird[:h] * 0.5
+
+      dx = collision_mid_x - player_x
+      dy = collision_mid_y - player_y
+
+      overlap_x = player_half_w + collision_half_w - dx.abs
+      next if overlap_x < 0
+
+      overlap_y = player_half_h + collision_half_h - dy.abs
+      next if overlap_y < 0
+
+      if dx < dy
+        depth = dx
+        if dx < 0
+          nx = -1.0
+          ny = 0.0
+          px = collision_mid_x - collision_half_w
+          py = collision_mid_y
+        else
+          nx = 1.0
+          ny = 0.0
+          px = collision_mid_x + collision_half_w
+          py = collision_mid_y
+        end
+      else
+        depth = dy
+        if dy < 0
+          nx = 0.0
+          ny = -1.0
+          px = collision_mid_x
+          py = collision_mid_y - collision_half_h
+        else
+          nx = 0.0
+          ny = 1.0
+          px = collision_mid_x
+          py = collision_mid_y + collision_half_h
+        end
+      end
+
       r = rand
       color = 128 + (255 - 128) * r
       vx = bird[:vx] * r * -1.5
@@ -712,7 +759,7 @@ class Game
         bird_x = bird_x > @player[:x] ? bird_x - maze_world_width : bird_x + maze_world_width
       end
 
-      @balloon_particles.spawn(bird_x, bird[:y], 16, 16, vx, vy, 120, 16, 255, color, 0, 255)
+      @balloon_particles.spawn(px + bird[:w] * 0.5, py + bird[:h] * 0.5, 16, 16, vx, vy, 120, 16, 255, color, 0, 255)
     end
 
     # Handle end collisions
