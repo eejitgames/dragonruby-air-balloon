@@ -67,7 +67,7 @@ class Game
     return if game_has_lost_focus?
 
     dx = inputs.left_right_perc
-    dy = @player[:falling] ? 0.0 : inputs.up_down_perc
+    dy = @player[:falling] ? [inputs.up_down_perc, 0.0].min : inputs.up_down_perc
 
     # Normalize the input so diagonal movements aren't faster
     if dx != 0 || dy != 0
@@ -248,7 +248,7 @@ class Game
 
     @balloon_particles.draw_override(ffi)
 
-    draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
+    draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', ffi, { a: 48, blendmode_enum: 2 })
   end
 
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, ffi, render_options = {})
@@ -325,16 +325,16 @@ class Game
         colliders = []
 
         unless cell[:north]
-          colliders << { x: x1, y: y1, w: @maze_cell_w, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1, y: y1, w: @maze_cell_w, h: @wall_thickness, path: 'sprites/cloud_s.png' }.merge!(collider)
         end
         unless cell[:west]
-          colliders << { x: x1, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
+          colliders << { x: x1, y: y1, w: @wall_thickness, h: @maze_cell_h, path: 'sprites/cloud_w.png' }.merge!(collider)
         end
         unless cell[:links].key? cell[:east]
-          colliders << { x: x2, y: y1, w: @wall_thickness, h: @maze_cell_h }.merge!(collider)
+          colliders << { x: x2, y: y1, w: @wall_thickness, h: @maze_cell_h, path: 'sprites/cloud_w.png' }.merge!(collider)
         end
         unless cell[:links].key? cell[:south]
-          colliders << { x: x1, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness }.merge!(collider)
+          colliders << { x: x1, y: y2 - @wall_thickness, w: @maze_cell_w + @wall_thickness, h: @wall_thickness, path: 'sprites/cloud_s.png' }.merge!(collider)
         end
 
         colliders
@@ -346,14 +346,31 @@ class Game
 
   def draw_maze(ffi)
     GTK::Geometry.find_all_intersect_rect_quad_tree(@viewport, @maze_colliders_quad_tree).each do |wall|
-      ffi.draw_solid(x_to_screen(wall[:x]),
-                     y_to_screen(wall[:y]),
-                     wall[:w] * @camera[:zoom],
-                     wall[:h] * @camera[:zoom],
-                     wall[:r],
-                     wall[:g],
-                     wall[:b],
-                     wall[:a])
+      ffi.draw_sprite_5(x_to_screen(wall[:x]),      # x
+                        y_to_screen(wall[:y]),      # y
+                        wall[:w] * @camera[:zoom],  # w
+                        wall[:h] * @camera[:zoom],  # h
+                        wall[:path],                # path
+                        nil,                        # angle
+                        nil,                        # alpha
+                        nil,                        # r
+                        nil,                        # g,
+                        nil,                        # b
+                        nil,                        # tile_x
+                        nil,                        # tile_y
+                        nil,                        # tile_w
+                        nil,                        # tile_h
+                        nil,                        # flip_horizontally
+                        nil,                        # flip_vertically
+                        nil,                        # angle_anchor_x
+                        nil,                        # angle_anchor_y
+                        nil,                        # source_x
+                        nil,                        # source_y
+                        nil,                        # source_w,
+                        nil,                        # source_h
+                        1,                        # blendmode_enum
+                        nil,                        # anchor_x
+                        nil)                        # anchor_y
     end
 
     if @wrapped_viewport
@@ -361,14 +378,31 @@ class Game
         map_w = @maze_width * @maze_cell_w
         map_w = @wrapped_viewport[:position] == :left ? map_w : -map_w
 
-        ffi.draw_solid(x_to_screen(wall[:x] - map_w),
-                       y_to_screen(wall[:y]),
-                       wall[:w] * @camera[:zoom],
-                       wall[:h] * @camera[:zoom],
-                       wall[:r],
-                       wall[:g],
-                       wall[:b],
-                       wall[:a])
+        ffi.draw_sprite_5(x_to_screen(wall[:x] - map_w),      # x
+                          y_to_screen(wall[:y]),      # y
+                          wall[:w] * @camera[:zoom],  # w
+                          wall[:h] * @camera[:zoom],  # h
+                          wall[:path],                # path
+                          nil,                        # angle
+                          nil,                        # alpha
+                          nil,                        # r
+                          nil,                        # g,
+                          nil,                        # b
+                          nil,                        # tile_x
+                          nil,                        # tile_y
+                          nil,                        # tile_w
+                          nil,                        # tile_h
+                          nil,                        # flip_horizontally
+                          nil,                        # flip_vertically
+                          nil,                        # angle_anchor_x
+                          nil,                        # angle_anchor_y
+                          nil,                        # source_x
+                          nil,                        # source_y
+                          nil,                        # source_w,
+                          nil,                        # source_h
+                          1,                        # blendmode_enum
+                          nil,                        # anchor_x
+                          nil)
       end
     end
   end
@@ -624,6 +658,17 @@ class Game
       anchor_x: 0.5,
       primitive_marker: :solid
     }
+
+    outputs.primitives << {
+      x: @screen_width * 0.5,
+      y: 40,
+      w: 24,
+      h: 24,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      path: 'sprites/He.png',
+      primitive_marker: :sprite
+    }
   end
 
   def handle_wall_collision
@@ -696,14 +741,9 @@ class Game
 
   def handle_item_collision
     GTK::Geometry.find_all_intersect_rect(@player, @items).each do |item|
-      if item[:item_type] == :coin
-        args.audio[:coin] = { input: "sounds/coin.wav", gain: 1.5 }
-        @player[:coins] += 1
-        @items.delete(item)
-      end
       if item[:item_type] == :helium
         puts 'helium'
-        #args.audio[:coin] = { input: "sounds/coin.wav", gain: 1.5 }
+        args.audio[:hiss] = { input: "sounds/hiss.ogg", gain: 1.0 }
         @player[:helium] = 100
         @items.delete(item)
       end
@@ -1322,11 +1362,11 @@ class Game
 
     audio[:music] =
       {
-      input: 'sounds/up-up-and-away-sketch.ogg',
+      input: 'sounds/up-up-and-away.ogg',
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.5,
+      gain: 0.75,
       paused: true,
       looping: true
     }
@@ -1397,8 +1437,8 @@ class Game
 
     # Birds
     @birds = []
-    @bird_spawn_interval = 100
-    @bird_spawn_variance = 60
+    @bird_spawn_interval = 90
+    @bird_spawn_variance = 30
     @bird_helium_damage = 5
 
     # Configure wind
