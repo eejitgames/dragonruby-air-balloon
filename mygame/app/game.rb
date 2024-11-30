@@ -20,7 +20,7 @@ class Game
   def tick_title_scene
     audio[:menu_music].paused = false
 
-    outputs.labels << { x: 640, y: 360, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
+    outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
@@ -55,7 +55,7 @@ class Game
   end
 
   def tick_game_over_scene
-    outputs.labels << { x: 640, y: 360, text: "Game Over !", alignment_enum: 1 }
+    outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Game Over !", alignment_enum: 1 }
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_title_scene
