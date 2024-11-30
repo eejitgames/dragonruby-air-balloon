@@ -39,12 +39,6 @@ class Game
     # Hack, draw minimap here instead of in main render method
     draw_minimap
 
-    if $gtk.args.inputs.mouse.click
-      @next_scene = :tick_game_over_scene
-      audio[:music].paused = true
-      audio[:wind].paused = true
-    end
-
     @timer = (21 - @clock / 60.0).to_i
     draw_hud
 
@@ -58,7 +52,7 @@ class Game
     outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Game Over !", alignment_enum: 1 }
 
     if $gtk.args.inputs.mouse.click
-      @next_scene = :tick_title_scene
+      @next_scene = :tick_game_scene
       @defaults_set = false
     end
   end
@@ -1021,23 +1015,24 @@ class Game
       end
 
       # Pick a random start height
-      y_start = @viewport[:y] + rand * @viewport[:h]
+      y_start = @player[:y] + (rand * @viewport[:h] * 0.25).randomize(:sign)
+
+      # Ensure y_end is on the opposite side of the player's y position
+      y_end = @player[:y] + (rand * @viewport[:h] * 0.25 * -1).randomize(:sign)
 
       # Predict the player's future position
       spline_distance = Math.sqrt((x_end - x_start)**2 + (y_start - @player[:y])**2)
-      relative_speed = Math.sqrt((@player[:vx] - @bird[:vx])**2 + (@player[:vy] - @bird[:vy])**2) # this is not accurate
-      time = spline_distance / relative_speed
+      bird_speed = 5
+      time = spline_distance / bird_speed
       predicted_player_x = @player[:x] + @player[:vx] * time
       predicted_player_y = @player[:y] + @player[:vy] * time
 
       # Control points
-      control_x1 = x_start + predicted_player_x
-      control_y1 = y_start + predicted_player_y
-      control_x2 = predicted_player_x
-      control_y2 = predicted_player_y
-
-      # Pick a random end height
-      y_end = @viewport[:y] + rand * @viewport[:h]
+      # Control points, ensuring smooth intersection with the player's predicted position
+      control_x1 = x_start + (predicted_player_x - x_start) * 0.33
+      control_y1 = y_start + (predicted_player_y - y_start) * 0.33
+      control_x2 = x_start + (predicted_player_x - x_start) * 0.33
+      control_y2 = y_start + (predicted_player_y - y_start) * 0.33
 
       # Generate a spline path that intersects with the predicted player position
       points = bezier(x_start, y_start, control_x1, control_y1, control_x2, control_y2, x_end, y_end, 20)
@@ -1066,8 +1061,8 @@ class Game
         dx = derivative_for_t(spline_x[0], spline_x[1], spline_x[2], spline_x[3], bird[:progress])
         dy = derivative_for_t(spline_y[0], spline_y[1], spline_y[2], spline_y[3], bird[:progress])
         bird[:angle] = Math.atan2(dy, dx) * (180 / Math::PI)
-        bird[:vx] = dx * 0.005 # velocity vector scaled by speed factor
-        bird[:vy] = dy * 0.005
+        bird[:vx] = dx * 0.004 # velocity vector scaled by speed factor
+        bird[:vy] = dy * 0.004
       else
         # Continue in the current direction with the calculated velocity
         bird[:x] += bird[:vx]
@@ -1310,8 +1305,8 @@ class Game
 
     @lost_focus = true
     @clock = 0
-    @current_scene = :tick_title_scene
-    @next_scene = nil
+    @current_scene ||= :tick_title_scene
+    @next_scene ||= nil
     @tile_x = nil
     @tile_y = nil
     @screen_height = 1280
@@ -1353,14 +1348,14 @@ class Game
       max_speed: 10.0,
     }
 
-    audio[:menu_music] = {
+    audio[:menu_music] ||= {
       input: 'sounds/InGameTheme20secGJ.ogg',
       gain: 0.8,
       paused: false,
       looping: true,
     }
 
-    audio[:music] =
+    audio[:music] ||=
       {
       input: 'sounds/up-up-and-away.ogg',
       x: 0.0,
@@ -1383,7 +1378,7 @@ class Game
       gain: 0.0
     }
 
-    audio[:wind] = {
+    audio[:wind] ||= {
       input: 'sounds/Wind.ogg',
       x: 0.0,
       y: 0.0,
@@ -1437,7 +1432,7 @@ class Game
 
     # Birds
     @birds = []
-    @bird_spawn_interval = 90
+    @bird_spawn_interval = 120
     @bird_spawn_variance = 30
     @bird_helium_damage = 5
 
