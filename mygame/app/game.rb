@@ -108,6 +108,18 @@ class Game
     @player[:boost_dy] = @boost_input_dy / magnitude
   end
 
+  def calc_engine
+    velocity = Math.sqrt(@player[:vx]**2 + @player[:vy]**2)
+    max_velocity = @player[:max_speed]
+
+    clamped_velocity = [velocity, max_velocity].min
+    gain_engine0 = 1.0 - clamped_velocity / max_velocity
+    gain_engine1 = clamped_velocity / max_velocity
+
+    audio[:engine0].gain = gain_engine0
+    audio[:engine1].gain = gain_engine1
+  end
+
   def calc_player
     # Slowly increase upward velocity
     if @player[:helium] > 0
@@ -157,6 +169,9 @@ class Game
       @camera[:x] -= @maze_width * @maze_cell_w
       @camera_teleport_offset[:x] += @maze_width * @maze_cell_w
     end
+
+    # Decrement helium
+    @player[:helium] = (@player[:helium] - 0.15).clamp(0, 100)
   end
 
   def calc_camera
@@ -198,6 +213,7 @@ class Game
 
     calc_player
     calc_camera
+    calc_engine
 
     # Calc birds
     try_create_bird
@@ -434,7 +450,6 @@ class Game
     # Create a combined render target of the mask and minimap
     outputs[:minimap_final].w = @minimap_width
     outputs[:minimap_final].h = @minimap_height
-    outputs[:minimap_final].transient!
 
     # Draw the mask into the combined render target
     outputs[:minimap_final].primitives << {
@@ -459,22 +474,20 @@ class Game
       primitive_marker: :sprite
     }
 
-    # Draw a solid background
-    outputs.primitives << {
-      x: 0,
-      y: 0,
-      w: @minimap_width,
-      h: @minimap_height,
-      r: 0, g: 0, b: 0, a: 64,
-      primitive_marker: :solid,
-    }
-
     # Draw the combined render target of minimap and mask
     outputs.primitives << {
       x: 0,
       y: 0,
-      w: @minimap_width,
-      h: @minimap_height,
+      w: @minimap_width * 2,
+      h: @minimap_height * 2,
+      r: 0, g: 0, b: 0, a: 64,
+      primitive_marker: :solid
+    }
+    outputs.primitives << {
+      x: 0,
+      y: 0,
+      w: @minimap_width * 2,
+      h: @minimap_height * 2,
       path: :minimap_final,
       blendmode_enum: 2,
     }
@@ -482,7 +495,6 @@ class Game
     # Debug
     @minimap_revealed ||= false
     @minimap_revealed = !@minimap_revealed if args.inputs.keyboard.key_up.r && !args.gtk.production?
-
     @draw_bird_paths = !@draw_bird_paths if args.inputs.keyboard.key_up.p && !args.gtk.production?
 
     if @minimap_revealed
@@ -492,13 +504,14 @@ class Game
         w: @minimap_width,
         h: @minimap_height,
         path: :minimap,
+        primitive_marker: :sprite,
       }
     end
 
     # Draw player position
     outputs.primitives << {
-      x: minimap_player_x,
-      y: minimap_player_y,
+      x: minimap_player_x * 2,
+      y: minimap_player_y * 2,
       w: 5,
       h: 5,
       r: 255,
@@ -619,6 +632,7 @@ class Game
     player_half_w = @player[:w] * 0.5
     player_half_h = @player[:h] * 0.5
 
+    @current_wall_collisions ||= {}
     walls = GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree)
 
     if @wrapped_viewport
@@ -644,6 +658,12 @@ class Game
       if overlap_x >= 0
         overlap_y = player_half_h + collision_half_h - dy.abs
         if overlap_y >= 0
+          unless @current_wall_collisions[wall]
+            # Play collision sound on first collision
+            args.audio[:bounce] = { input: "sounds/bounce2.ogg" }
+            @current_wall_collisions[wall] = true
+          end
+
           if overlap_x < overlap_y
             nx = dx < 0 ? -1.0 : 1.0
             ny = 0.0
@@ -666,6 +686,8 @@ class Game
             end
             j += 1
           end
+        else
+          @current_wall_collisions.delete(wall)
         end
       end
       i += 1
@@ -942,7 +964,7 @@ class Game
   end
 
   def try_create_bird
-    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', anchor_x: 0.5, anchor_y: 0.5, has_coin: false }
+    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', vx: 5.0, vy: 5.0, anchor_x: 0.5, anchor_y: 0.5, has_coin: false }
 
     interval = @bird_spawn_interval + (rand(2 * @bird_spawn_variance + 1) - @bird_spawn_variance)
 
@@ -962,7 +984,9 @@ class Game
       y_start = @viewport[:y] + rand * @viewport[:h]
 
       # Predict the player's future position
-      time = 2.0
+      spline_distance = Math.sqrt((x_end - x_start)**2 + (y_start - @player[:y])**2)
+      relative_speed = Math.sqrt((@player[:vx] - @bird[:vx])**2 + (@player[:vy] - @bird[:vy])**2) # this is not accurate
+      time = spline_distance / relative_speed
       predicted_player_x = @player[:x] + @player[:vx] * time
       predicted_player_y = @player[:y] + @player[:vy] * time
 
@@ -1146,7 +1170,14 @@ class Game
   end
 
   def draw_player(ffi)
-    player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: 10, repeat: true)
+    velocity = 10 - Math.sqrt(@player[:vx]**2 + @player[:vy]**2).clamp(0, @player[:max_speed])
+
+    min_hold_for = 1  # Fastest animation speed (fewer ticks per frame)
+    max_hold_for = 5  # Slowest animation speed (more ticks per frame)
+
+    hold_for = velocity.remap(0, @player[:max_speed], min_hold_for, max_hold_for).to_i
+
+    player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: hold_for, repeat: true)
 
     ffi.draw_sprite_5(x_to_screen(@player[:x]), # x
                       y_to_screen(@player[:y]), # y
@@ -1295,9 +1326,21 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.7, # 0.1 is reasonably balanced
+      gain: 0.5,
       paused: true,
       looping: true
+    }
+
+    audio[:engine0] ||= {
+      input: 'sounds/engine0.ogg',
+      looping: true,
+      gain: 1.0,
+    }
+
+    audio[:engine1] ||= {
+      input: 'sounds/engine1.ogg',
+      looping: true,
+      gain: 0.0
     }
 
     audio[:wind] = {
@@ -1321,7 +1364,7 @@ class Game
     create_goal
 
     # Create Minimap
-    @minimap_cell_size = 16
+    @minimap_cell_size = 8
     @minimap_width = @maze_width * @minimap_cell_size
     @minimap_height = @maze_height * @minimap_cell_size
     create_minimap
@@ -1359,7 +1402,7 @@ class Game
     @bird_helium_damage = 5
 
     # Configure wind
-    @wind_gain_multiplier = 1.0
+    @wind_gain_multiplier = 0.05
     @wind_gain_speed = 0.5
 
     # Configure clouds
