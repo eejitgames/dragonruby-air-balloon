@@ -108,6 +108,18 @@ class Game
     @player[:boost_dy] = @boost_input_dy / magnitude
   end
 
+  def calc_engine
+    velocity = Math.sqrt(@player[:vx]**2 + @player[:vy]**2)
+    max_velocity = @player[:max_speed]
+
+    clamped_velocity = [velocity, max_velocity].min
+    gain_engine0 = 1.0 - clamped_velocity / max_velocity
+    gain_engine1 = clamped_velocity / max_velocity
+
+    audio[:engine0].gain = gain_engine0
+    audio[:engine1].gain = gain_engine1
+  end
+
   def calc_player
     # Slowly increase upward velocity
     if @player[:helium] > 0
@@ -201,6 +213,7 @@ class Game
 
     calc_player
     calc_camera
+    calc_engine
 
     # Calc birds
     try_create_bird
@@ -619,6 +632,7 @@ class Game
     player_half_w = @player[:w] * 0.5
     player_half_h = @player[:h] * 0.5
 
+    @current_wall_collisions ||= {}
     walls = GTK::Geometry.find_all_intersect_rect_quad_tree(@player, @maze_colliders_quad_tree)
 
     if @wrapped_viewport
@@ -644,6 +658,12 @@ class Game
       if overlap_x >= 0
         overlap_y = player_half_h + collision_half_h - dy.abs
         if overlap_y >= 0
+          unless @current_wall_collisions[wall]
+            # Play collision sound on first collision
+            args.audio[:bounce] = { input: "sounds/bounce2.ogg" }
+            @current_wall_collisions[wall] = true
+          end
+
           if overlap_x < overlap_y
             nx = dx < 0 ? -1.0 : 1.0
             ny = 0.0
@@ -666,6 +686,8 @@ class Game
             end
             j += 1
           end
+        else
+          @current_wall_collisions.delete(wall)
         end
       end
       i += 1
@@ -1148,7 +1170,14 @@ class Game
   end
 
   def draw_player(ffi)
-    player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: 10, repeat: true)
+    velocity = 10 - Math.sqrt(@player[:vx]**2 + @player[:vy]**2).clamp(0, @player[:max_speed])
+
+    min_hold_for = 1  # Fastest animation speed (fewer ticks per frame)
+    max_hold_for = 5  # Slowest animation speed (more ticks per frame)
+
+    hold_for = velocity.remap(0, @player[:max_speed], min_hold_for, max_hold_for).to_i
+
+    player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: hold_for, repeat: true)
 
     ffi.draw_sprite_5(x_to_screen(@player[:x]), # x
                       y_to_screen(@player[:y]), # y
@@ -1297,9 +1326,21 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.7, # 0.1 is reasonably balanced
+      gain: 0.5,
       paused: true,
       looping: true
+    }
+
+    audio[:engine0] ||= {
+      input: 'sounds/engine0.ogg',
+      looping: true,
+      gain: 1.0,
+    }
+
+    audio[:engine1] ||= {
+      input: 'sounds/engine1.ogg',
+      looping: true,
+      gain: 0.0
     }
 
     audio[:wind] = {
@@ -1361,7 +1402,7 @@ class Game
     @bird_helium_damage = 5
 
     # Configure wind
-    @wind_gain_multiplier = 1.0
+    @wind_gain_multiplier = 0.05
     @wind_gain_speed = 0.5
 
     # Configure clouds
