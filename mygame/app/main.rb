@@ -1,5 +1,6 @@
 require_relative 'game'
 require_relative 'maze'
+require_relative 'particles'
 
 def boot args
   args.state = nil

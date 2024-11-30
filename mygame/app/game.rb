@@ -101,14 +101,13 @@ class Game
 
     @player[:dx] = @player[:vx] / magnitude
     @player[:dy] = @player[:vy] / magnitude
-
-    @player[:trail] = []
   end
 
   def calc_player
     # Slowly increase upward velocity
     if @player[:helium] > 0
       @player[:vy] += @player[:rising]
+      @player[:falling] = false
     else
       @player[:falling] = true
       @player[:vy] -= @player[:rising]
@@ -126,14 +125,17 @@ class Game
       @player[:vy] += @player[:dy] * boost_increment
       @player[:boost_remaining] -= 1
 
-      # Speed trail effect
-      @player[:trail] << { x: @player[:x], y: @player[:y] }
+      @player[:trail] << { x: @player[:x], y: @player[:y], alpha: 255 }
       @player[:trail].shift if @player[:trail].length > 10
 
       if @player[:boost_remaining] <= 0
         @player[:boosting] = false
-        @player[:trail].clear
       end
+    end
+
+    @player[:trail] = @player[:trail].reject do |trail_segment|
+      trail_segment[:alpha] -= 25 # Decrease alpha to create fade-out effect
+      true if trail_segment[:alpha] <= 0
     end
 
     # Warp player
@@ -154,6 +156,11 @@ class Game
   end
 
   def calc_camera
+    next_offset = 100.0 * @camera[:trauma]**2
+    @camera[:offset_x] = next_offset.randomize(:sign, :ratio)
+    @camera[:offset_y] = next_offset.randomize(:sign, :ratio)
+    @camera[:trauma] *= 0.95
+
     tx = @player[:x]
     ty = @player[:y] + @screen_height * @camera[:offset_y] / @camera[:zoom]
 
@@ -197,6 +204,9 @@ class Game
     handle_item_collision
     handle_bird_collision
 
+    # Tick particles
+    @balloon_particles.tick
+
     # Calc Wind
     new_wind_gain = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) * @wind_gain_multiplier
     audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, @wind_gain_speed)
@@ -215,6 +225,8 @@ class Game
     draw_player(ffi)
 
     draw_birds(ffi)
+
+    @balloon_particles.draw_override(ffi)
 
     draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
   end
@@ -278,6 +290,9 @@ class Game
     Maze.on(@maze)
 
     collider = { r: 255, g: 255, b: 255, a: 64, primitive_marker: :solid }
+
+    # S = 400x48
+    # W = 48*600
 
     # Create collision rects for maze
     maze_colliders = @maze.flat_map do |row|
@@ -506,67 +521,68 @@ class Game
   end
   def draw_hud
     # Timer
-    args.outputs.labels << {
-      x: @screen_width - 20,
-      y: @screen_height - 40,
-      text: "#{@timer}",
-      anchor_x: 1.0,
-      anchor_y: 1.0,
-      size_enum: 16,
-      font: 'fonts/Chango-Regular.ttf'
-    }
-    args.outputs.labels << {
-      x: @screen_width - 21,
-      y: @screen_height - 38,
-      text: "#{@timer}",
-      anchor_x: 1.0,
-      anchor_y: 1.0,
-      size_enum: 16,
-      r: 255,
-      g: 255,
-      b: 255,
-      font: 'fonts/Chango-Regular.ttf'
-    }
+    angle = Math.sin(@clock * 0.05) * 5
+    w, h = GTK::calcstringbox("#{@timer}", 32, "fonts/Chango-Regular.ttf")
 
-    # Coins
-=begin
-    outputs.labels << {
-      x: @screen_width * 0.5,
-      y: @screen_height - 40,
-      text: "#{@player[:coins]}",
-      anchor_x: 0.5,
-      anchor_y: 1.0,
-      size_enum: 16,
-      font: 'fonts/Chango-Regular.ttf'
-    }
-    outputs.labels << {
-      x: @screen_width * 0.5,
-      y: @screen_height - 38,
-      text: "#{@player[:coins]}",
-      anchor_x: 0.5,
-      anchor_y: 1.0,
-      size_enum: 16,
-      r: 255,
-      g: 255,
-      b: 0,
-      font: 'fonts/Chango-Regular.ttf'
-    }
+    ratio = @timer.to_f / 21
+    brightness_curve = 2.0
+    adjusted_ratio = ratio**brightness_curve
 
-    coins_w, coins_h = GTK.calcstringbox("#{@player[:coins]}", 16, 'fonts/Chango-Regular.ttf')
-    outputs.primitives << {
-      x: @screen_width * 0.5 - coins_w - 16,
-      y: @screen_height - coins_h - 15,
-      w: coins_h * 0.5,
-      h: coins_h * 0.5,
-      anchor_y: 0.5,
+    r = (255 * (1 - adjusted_ratio)).to_i
+    g = (255 * adjusted_ratio).to_i
+    b = 0
+
+    brightness_factor = 255.0 / (r + g + 1)
+    r = (r * brightness_factor).to_i
+    g = (g * brightness_factor).to_i
+    b = (b * brightness_factor).to_i
+
+    outputs[:timer].w = w + 1
+    outputs[:timer].h = h + 2
+    outputs[:timer].transient!
+
+    outputs[:timer].primitives << {
+      x: 1,
+      y: 0,
       anchor_x: 0.0,
-      path: 'sprites/coin.png',
+      anchor_y: 0.0,
+      text: "#{@timer}",
+      size_enum: 32,
+      r: 0,
+      g: 0,
+      b: 0,
+      font: 'fonts/Chango-Regular.ttf',
+      primitive_marker: :label
+    }
+    outputs[:timer].primitives << {
+      x: 0,
+      y: 2,
+      text: "#{@timer}",
+      anchor_x: 0.0,
+      anchor_y: 0.0,
+      size_enum: 32,
+      r: r,
+      g: g,
+      b: b,
+      font: 'fonts/Chango-Regular.ttf',
+      primitive_marker: :label
+    }
+
+    timer_w = Math.sin(@clock * 0.05) * 5
+    outputs.primitives << {
+      x: @screen_width - w,
+      y: @screen_height - h,
+      w: w + timer_w,
+      h: h,
+      angle: angle,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      path: :timer,
       primitive_marker: :sprite,
     }
-=end
 
     # Helium bar
-    args.outputs.primitives << {
+    outputs.primitives << {
       x: @screen_width * 0.5,
       y: 20,
       w: @screen_width * 0.75,
@@ -579,7 +595,7 @@ class Game
       primitive_marker: :solid
     }
 
-    args.outputs.primitives << {
+    outputs.primitives << {
       x: @screen_width * 0.5,
       y: 20,
       w: (@screen_width * 0.75 * @player[:helium] * 0.01).clamp(0, @screen_width * 0.75), # divide player helium by 100
@@ -609,39 +625,46 @@ class Game
       end)
     end
 
-    walls.each do |collision|
-      collision_mid_x = collision[:x] + collision[:w] * 0.5
-      collision_mid_y = collision[:y] + collision[:h] * 0.5
-      collision_half_w = collision[:w] * 0.5
-      collision_half_h = collision[:h] * 0.5
+    i = 0
+    while i < walls.length
+      wall = walls[i]
+      collision_mid_x = wall[:x] + wall[:w] * 0.5
+      collision_mid_y = wall[:y] + wall[:h] * 0.5
+      collision_half_w = wall[:w] * 0.5
+      collision_half_h = wall[:h] * 0.5
 
       dx = collision_mid_x - player_mid_x
       dy = collision_mid_y - player_mid_y
 
       overlap_x = player_half_w + collision_half_w - dx.abs
-      next if overlap_x < 0
+      if overlap_x >= 0
+        overlap_y = player_half_h + collision_half_h - dy.abs
+        if overlap_y >= 0
+          if overlap_x < overlap_y
+            nx = dx < 0 ? -1.0 : 1.0
+            ny = 0.0
+          else
+            nx = 0.0
+            ny = dy < 0 ? -1.0 : 1.0
+          end
 
-      overlap_y = player_half_h + collision_half_h - dy.abs
-      next if overlap_y < 0
+          j = 0
+          while j < 10
+            # Relative velocity in the direction of the collision normal
+            rvn = -(nx * @player[:vx] + ny * @player[:vy])
+            if rvn <= 0
+              # Calculate the impulse magnitude
+              jN = -(1 + @cloud_bounciness) * rvn
 
-      if overlap_x < overlap_y
-        nx = dx < 0 ? -1.0 : 1.0
-        ny = 0.0
-      else
-        nx = 0.0
-        ny = dy < 0 ? -1.0 : 1.0
+              # Apply the impulse
+              @player[:vx] -= jN * nx
+              @player[:vy] -= jN * ny
+            end
+            j += 1
+          end
+        end
       end
-
-      # Relative velocity in the direction of the collision normal
-      rvn = -(nx * @player[:vx] + ny * @player[:vy])
-      next if rvn > 0
-
-      # Calculate the impulse magnitude
-      jN = -(1 + @cloud_bounciness) * rvn
-
-      # Apply the impulse
-      @player[:vx] -= jN * nx
-      @player[:vy] -= jN * ny
+      i += 1
     end
   end
 
@@ -662,45 +685,41 @@ class Game
   end
 
   def handle_bird_collision
-    GTK::Geometry.find_all_intersect_rect(@player, @birds).each do |bird|
-      next unless @player[:coins] > 0
+    @current_bird_collisions ||= {}
+    current_collisions = GTK::Geometry.find_all_intersect_rect(@player, @birds)
 
-      @player[:coins] -= 1
-      bird[:has_coin] = true
+    # Define the maze width in world coordinates
+    maze_world_width = @maze_width * @maze_cell_w
 
-      args.audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
+    # Handle new collisions
+    current_collisions.each do |bird|
+      unless @current_bird_collisions[bird]
+        # Play sound on begin overlap
+        args.audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
+        @player[:helium] -= @bird_helium_damage
+        @current_bird_collisions[bird] = true
+        trauma = Math.sqrt(bird[:vx]**2 + bird[:vy]**2) * 0.02
+        @camera[:trauma] += trauma
+      end
+
+      r = rand
+      color = 128 + (255 - 128) * r
+      vx = bird[:vx] * r * -1.5
+      vy = bird[:vy] * r * -1.5
+
+      bird_x = bird[:x]
+      if (bird_x - @player[:x]).abs > @screen_width
+        bird_x = bird_x > @player[:x] ? bird_x - maze_world_width : bird_x + maze_world_width
+      end
+
+      @balloon_particles.spawn(bird_x, bird[:y], 16, 16, vx, vy, 120, 16, 255, color, 0, 255)
     end
-  end
 
-  def create_coins
-    coin = { w: 32, h: 32, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/coin.png', primitive_marker: :sprite }
+    # Handle end collisions
+    @current_bird_collisions.each_key do |bird|
+      unless current_collisions.include?(bird)
+        @current_bird_collisions.delete(bird)
 
-    @max_coins_per_cell = 8
-    @coin_chance_per_cell = 0.3
-    @coins = []
-
-    @maze.each do |row|
-      row.each do |cell|
-        @max_coins_per_cell.times do
-          next unless rand < @coin_chance_per_cell
-
-          loop do
-            quantized_x = (cell[:col] * @maze_cell_w + @wall_thickness + coin[:w] * 0.5 + rand(@maze_cell_w - 2 * @wall_thickness) - coin[:w] * 0.5) / @wall_thickness * @wall_thickness
-            quantized_y = (cell[:row] * @maze_cell_h + @wall_thickness + coin[:h] * 0.5 + rand(@maze_cell_h - 3 * @wall_thickness) - coin[:h] * 0.5) / @wall_thickness * @wall_thickness
-
-            new_coin = coin.merge(x: quantized_x, y: quantized_y)
-
-            # Check for overlap
-            overlap = @coins.any? do |existing_coin|
-              (existing_coin[:x] - new_coin[:x]).abs < @wall_thickness && (existing_coin[:y] - new_coin[:y]).abs < @wall_thickness
-            end
-
-            unless overlap
-              @coins << new_coin
-              break
-            end
-          end
-        end
       end
     end
   end
@@ -742,7 +761,6 @@ class Game
   end
 
   def create_items
-    # TODO: add additional item arrays
     @items = [].concat(@canisters)
   end
 
@@ -806,6 +824,21 @@ class Game
                           0.5, # anchor_x
                           0.5) # anchor_y
       end
+    end
+  end
+
+  def spawn_balloon_particles
+    player_x = @player[:x]
+    player_y = @player[:y]
+
+    i = 0
+    while i < 40
+      angle = rand * 360.0
+      speed = rand * 3.0
+      vx = Math.cos(angle * Math::PI / 180) * speed
+      vy = Math.sin(angle * Math::PI / 180) * speed
+      @balloon_particles.spawn(player_x, player_y, 16, 16, vx, vy, 120, 16, 255, 255, 0, 255)
+      i += 1
     end
   end
 
@@ -878,15 +911,15 @@ class Game
       y_start = @viewport[:y] + rand * @viewport[:h]
 
       # Predict the player's future position
-      time_interval = 2.0 # Adjust this value as needed
-      predicted_player_x = @player[:x] + @player[:vx] * time_interval
-      predicted_player_y = @player[:y] + @player[:vy] * time_interval
+      time = 2.0
+      predicted_player_x = @player[:x] + @player[:vx] * time
+      predicted_player_y = @player[:y] + @player[:vy] * time
 
       # Control points
-      control_x1 = (x_start + predicted_player_x - @player[:w]) / 2
-      control_y1 = (y_start + predicted_player_y - @player[:h]) / 2
-      control_x2 = predicted_player_x - @player[:w]
-      control_y2 = predicted_player_y - @player[:h]
+      control_x1 = x_start + predicted_player_x
+      control_y1 = y_start + predicted_player_y
+      control_x2 = predicted_player_x
+      control_y2 = predicted_player_y
 
       # Pick a random end height
       y_end = @viewport[:y] + rand * @viewport[:h]
@@ -1093,14 +1126,14 @@ class Game
 
     if @player[:trail]
       @player[:trail].each_with_index do |pos, index|
-        alpha = 255 * (Math.log(index + 1) / Math.log(@player[:trail].length + 1))
+
         ffi.draw_sprite_5(x_to_screen(pos[:x]),  # x
                           y_to_screen(pos[:y]),  # y
                           @player[:w] * @camera[:zoom],  # w
                           @player[:h] * @camera[:zoom],  # h
                           "sprites/balloon_#{player_sprite_index + 1}.png",  # path
                           nil,  # angle
-                          alpha,  # alpha
+                          pos[:alpha],  # alpha
                           nil,  # r
                           nil,  # g,
                           nil,  # b
@@ -1130,6 +1163,7 @@ class Game
   def y_to_screen(y)
     ((y - @camera[:y]) * @camera[:zoom]) + @screen_height * 0.5
   end
+
 
   def game_has_lost_focus?
     return true unless Kernel.tick_count > 0
@@ -1173,6 +1207,7 @@ class Game
       anchor_y: 0.5,
       flip_horizontally: false,
 
+      trail: [],
       coins: 0,
       helium: 100,
 
@@ -1181,10 +1216,10 @@ class Game
       # Boost
       dx: 0.0,
       dy: 0.0,
-      boost: 80.0,
+      boost: 800.0,
       boosting: false,
       boost_remaining: 0,
-      boost_duration: 120, # in ticks
+      boost_duration: 30, # in ticks
       last_boost_time: -Float::INFINITY,
 
       # Physics
@@ -1249,7 +1284,11 @@ class Game
       zoom: 0.6,
       zoom_speed: 0.05,
       lag: 0.05,
+      shake_duration: 60,
+      shake_intensity: 0.2,
+      trauma: 0.0
     }
+
     @camera_teleport_offset = { x: 0, y: 0 }
 
     # Create Background
@@ -1260,13 +1299,13 @@ class Game
 
     # Create Items
     create_helium
-    #create_coins
     create_items
 
     # Birds
     @birds = []
     @bird_spawn_interval = 100
     @bird_spawn_variance = 60
+    @bird_helium_damage = 5
 
     # Configure wind
     @wind_gain_multiplier = 1.0
@@ -1274,6 +1313,8 @@ class Game
 
     # Configure clouds
     @cloud_bounciness = 0.75 # 0..1 representing energy loss on bounce
+
+    @balloon_particles = Particles.new('sprites/star.png', @camera, @screen_width, @screen_height, -5.0)
 
     @defaults_set = :true
   end
