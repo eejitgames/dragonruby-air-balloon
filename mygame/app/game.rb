@@ -157,6 +157,9 @@ class Game
       @camera[:x] -= @maze_width * @maze_cell_w
       @camera_teleport_offset[:x] += @maze_width * @maze_cell_w
     end
+
+    # Decrement helium
+    @player[:helium] = (@player[:helium] - 0.15).clamp(0, 100)
   end
 
   def calc_camera
@@ -434,7 +437,6 @@ class Game
     # Create a combined render target of the mask and minimap
     outputs[:minimap_final].w = @minimap_width
     outputs[:minimap_final].h = @minimap_height
-    outputs[:minimap_final].transient!
 
     # Draw the mask into the combined render target
     outputs[:minimap_final].primitives << {
@@ -459,22 +461,20 @@ class Game
       primitive_marker: :sprite
     }
 
-    # Draw a solid background
-    outputs.primitives << {
-      x: 0,
-      y: 0,
-      w: @minimap_width,
-      h: @minimap_height,
-      r: 0, g: 0, b: 0, a: 64,
-      primitive_marker: :solid,
-    }
-
     # Draw the combined render target of minimap and mask
     outputs.primitives << {
       x: 0,
       y: 0,
-      w: @minimap_width,
-      h: @minimap_height,
+      w: @minimap_width * 2,
+      h: @minimap_height * 2,
+      r: 0, g: 0, b: 0, a: 64,
+      primitive_marker: :solid
+    }
+    outputs.primitives << {
+      x: 0,
+      y: 0,
+      w: @minimap_width * 2,
+      h: @minimap_height * 2,
       path: :minimap_final,
       blendmode_enum: 2,
     }
@@ -482,7 +482,6 @@ class Game
     # Debug
     @minimap_revealed ||= false
     @minimap_revealed = !@minimap_revealed if args.inputs.keyboard.key_up.r && !args.gtk.production?
-
     @draw_bird_paths = !@draw_bird_paths if args.inputs.keyboard.key_up.p && !args.gtk.production?
 
     if @minimap_revealed
@@ -492,13 +491,14 @@ class Game
         w: @minimap_width,
         h: @minimap_height,
         path: :minimap,
+        primitive_marker: :sprite,
       }
     end
 
     # Draw player position
     outputs.primitives << {
-      x: minimap_player_x,
-      y: minimap_player_y,
+      x: minimap_player_x * 2,
+      y: minimap_player_y * 2,
       w: 5,
       h: 5,
       r: 255,
@@ -942,7 +942,7 @@ class Game
   end
 
   def try_create_bird
-    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', anchor_x: 0.5, anchor_y: 0.5, has_coin: false }
+    @bird ||= { w: 48, h: 32, path: 'sprites/bird/frame-1.png', vx: 5.0, vy: 5.0, anchor_x: 0.5, anchor_y: 0.5, has_coin: false }
 
     interval = @bird_spawn_interval + (rand(2 * @bird_spawn_variance + 1) - @bird_spawn_variance)
 
@@ -962,7 +962,9 @@ class Game
       y_start = @viewport[:y] + rand * @viewport[:h]
 
       # Predict the player's future position
-      time = 2.0
+      spline_distance = Math.sqrt((x_end - x_start)**2 + (y_start - @player[:y])**2)
+      relative_speed = Math.sqrt((@player[:vx] - @bird[:vx])**2 + (@player[:vy] - @bird[:vy])**2) # this is not accurate
+      time = spline_distance / relative_speed
       predicted_player_x = @player[:x] + @player[:vx] * time
       predicted_player_y = @player[:y] + @player[:vy] * time
 
@@ -1321,7 +1323,7 @@ class Game
     create_goal
 
     # Create Minimap
-    @minimap_cell_size = 16
+    @minimap_cell_size = 8
     @minimap_width = @maze_width * @minimap_cell_size
     @minimap_height = @maze_height * @minimap_cell_size
     create_minimap
