@@ -698,7 +698,7 @@ class Game
         args.audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
         @player[:helium] -= @bird_helium_damage
         @current_bird_collisions[bird] = true
-        trauma = Math.sqrt(bird[:vx]**2 + bird[:vy]**2) * 0.02
+        trauma = Math.sqrt(bird[:vx]**2 + bird[:vy]**2) * 0.01
         @camera[:trauma] += trauma
       end
 
