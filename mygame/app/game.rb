@@ -69,7 +69,6 @@ class Game
     dx = inputs.left_right_perc
     dy = @player[:falling] ? 0.0 : inputs.up_down_perc
 
-
     # Normalize the input so diagonal movements aren't faster
     if dx != 0 || dy != 0
       l = 1.0 / Math.sqrt(dx * dx + dy * dy)
@@ -82,6 +81,8 @@ class Game
 
     # Check if the spacebar is pressed and 3 seconds have passed since the last boost
     if inputs.keyboard.key_down.space && (args.state.tick_count - @player[:last_boost_time]) >= 180  # 180 ticks = 3 seconds
+      @boost_input_dx = dx
+      @boost_input_dy = dy
       player_boost
       @last_boost_time = args.state.tick_count
     end
@@ -96,11 +97,15 @@ class Game
     @player[:boosting] = true
     @player[:boost_remaining] = @player[:boost_duration]
 
-    magnitude = Math.sqrt(@player[:vx]**2 + @player[:vy]**2)
+    # Disable cloud bounciness while boosting
+    @original_cloud_bounciness = @cloud_bounciness
+    @cloud_bounciness = 0
+
+    magnitude = Math.sqrt(@boost_input_dx**2 + @boost_input_dy**2)
     return if magnitude == 0
 
-    @player[:dx] = @player[:vx] / magnitude
-    @player[:dy] = @player[:vy] / magnitude
+    @player[:boost_dx] = @boost_input_dx / magnitude
+    @player[:boost_dy] = @boost_input_dy / magnitude
   end
 
   def calc_player
@@ -118,11 +123,12 @@ class Game
     @player[:vx] *= @player[:damping]
     @player[:vy] *= @player[:damping]
 
-
     if @player[:boosting]
       boost_increment = @player[:boost] / @player[:boost_duration]
-      @player[:vx] += @player[:dx] * boost_increment
-      @player[:vy] += @player[:dy] * boost_increment
+
+      # Use the stored boost direction
+      @player[:vx] += @player[:boost_dx] * boost_increment
+      @player[:vy] += @player[:boost_dy] * boost_increment
       @player[:boost_remaining] -= 1
 
       @player[:trail] << { x: @player[:x], y: @player[:y], alpha: 255 }
@@ -130,6 +136,7 @@ class Game
 
       if @player[:boost_remaining] <= 0
         @player[:boosting] = false
+        @cloud_bounciness = @original_cloud_bounciness
       end
     end
 
@@ -150,9 +157,6 @@ class Game
       @camera[:x] -= @maze_width * @maze_cell_w
       @camera_teleport_offset[:x] += @maze_width * @maze_cell_w
     end
-
-    # Decrement helium
-    @player[:helium] = (@player[:helium] - 0.15).clamp(0, 100)
   end
 
   def calc_camera
@@ -777,7 +781,7 @@ class Game
     canister = { w: image_w * 0.1, h: image_h * 0.1, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/helium.png', item_type: :helium, primitive_marker: :sprite }
 
     max_canisters_per_cell = 1
-    canister_chance_per_cell = 0.1
+    canister_chance_per_cell = 0.3
 
     @canisters = []
 
