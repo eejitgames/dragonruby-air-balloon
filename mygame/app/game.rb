@@ -230,13 +230,14 @@ class Game
     audio[:wind].gain = audio[:wind].gain.lerp(new_wind_gain, @wind_gain_speed)
 
     # Scroll clouds
-    @bg_x -= 0.2
+    @bg_x -= 10
     @clock += 1
   end
 
   def draw_override ffi
     draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png', ffi)
-
+    draw_parallax_layer_tiles(@bg_parallax * 2, 'sprites/cloudy_foreground.png', ffi, { a: 24, blendmode_enum: 2 })
+    draw_parallax_layer_tiles(@bg_parallax * 3, 'sprites/cloudy_foreground.png', ffi, { a: 24, blendmode_enum: 2 })
     draw_maze(ffi)
     draw_goal(ffi)
     draw_items(ffi)
@@ -246,7 +247,7 @@ class Game
 
     @balloon_particles.draw_override(ffi)
 
-    draw_parallax_layer_tiles(@bg_parallax * 1.5, 'sprites/cloudy_foreground.png', ffi, { a: 48, blendmode_enum: 2 })
+    draw_parallax_layer_tiles(@bg_parallax * 4, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
   end
 
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, ffi, render_options = {})
@@ -254,30 +255,32 @@ class Game
     adjusted_camera_x = @camera[:x] + @camera_teleport_offset[:x]
     adjusted_camera_y = @camera[:y] + @camera_teleport_offset[:y]
 
+    adjusted_w = @bg_w
+    adjusted_h = @bg_h
     # Calculate the parallax offset based on the adjusted camera position
-    parallax_offset_x = (adjusted_camera_x * parallax_multiplier + @bg_x) % @bg_w
-    parallax_offset_y = (adjusted_camera_y * parallax_multiplier + @bg_y) % @bg_h
+    parallax_offset_x = (adjusted_camera_x * parallax_multiplier + adjusted_w) % adjusted_w
+    parallax_offset_y = (adjusted_camera_y * parallax_multiplier + adjusted_h) % adjusted_h
 
     # Normalize negative offsets
-    parallax_offset_x += @bg_w if parallax_offset_x < 0
-    parallax_offset_y += @bg_h if parallax_offset_y < 0
+    parallax_offset_x += adjusted_w if parallax_offset_x < 0
+    parallax_offset_y += adjusted_h if parallax_offset_y < 0
 
     # Determine how many tiles are needed to cover the screen
-    tiles_x = (@screen_width / @bg_w.to_f).ceil + 1
-    tiles_y = (@screen_height / @bg_h.to_f).ceil + 1
+    tiles_x = (@screen_width / adjusted_w.to_f).ceil + 1
+    tiles_y = (@screen_height / adjusted_h.to_f).ceil + 1
 
     # Draw the tiles
     tile_x = 0
     while tile_x <= tiles_x
       tile_y = 0
       while tile_y <= tiles_y
-        x = (tile_x * @bg_w) - parallax_offset_x
-        y = (tile_y * @bg_h) - parallax_offset_y
+        x = (tile_x * adjusted_w) - parallax_offset_x
+        y = (tile_y * adjusted_h) - parallax_offset_y
 
         ffi.draw_sprite_4 x,                          # x
                           y,                          # y
-                          @bg_w,                      # w
-                          @bg_h,                      # h
+                          adjusted_w,                      # w
+                          adjusted_h,                      # h
                           image_path,                 # path
                           nil,                        # angle
                           render_options[:a] || nil,  # alpha
