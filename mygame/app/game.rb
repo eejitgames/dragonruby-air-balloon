@@ -6,11 +6,6 @@ class Game
     outputs.background_color = [ 0x92, 0xcc, 0xf0 ]
     send(@current_scene)
 
-    # outputs.debug.watch state
-    # outputs.watch "#{$gtk.current_framerate} FPS"
-    #outputs.debug.watch "tick count: #{@clock}"
-
-    # has there been a scene change ?
     if @next_scene
       @current_scene = @next_scene
       @next_scene = nil
@@ -22,7 +17,13 @@ class Game
 
     outputs.sprites << { x: 0, y: 0, w: @screen_width, h: @screen_height, path: 'sprites/splash.png' }
 
-    outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "click or tap to begin", alignment_enum: 1, font: 'fonts/Chango-Regular.ttf', size_enum: 2, r: 255, g: 255, b: 255, anchor_x: 0.5, anchor_y: 0.5 }
+    text_w, text_h = GTK.calcstringbox('click or tap to begin', 2, "fonts/Chango-Regular.ttf")
+    outputs[:title_text].w = text_w
+    outputs[:title_text].h = text_h
+    outputs[:title_text].labels << { x: 0, y: 0, text: 'click or tap to begin', font: 'fonts/Chango-Regular.ttf', size_enum: 2, r: 255, g: 255, b: 255, anchor_x: 0.0, anchor_y: 0.0 }
+
+    scale = Math.sin(Kernel.tick_count * 0.1) * 10
+    outputs.sprites << { x: @screen_width * 0.5, y: @screen_height * 0.5, w: text_w + scale, h: text_h, path: :title_text, primitive_marker: :sprite, anchor_x: 0.5, anchor_y: 0.5 }
     return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
@@ -48,7 +49,6 @@ class Game
     if @timer <= 0
       @current_scene = :tick_game_over_scene
     end
-
   end
 
   def tick_game_over_scene
@@ -430,7 +430,6 @@ class Game
     outputs[:minimap_mask].w = @minimap_width
     outputs[:minimap_mask].h = @minimap_height
     outputs[:minimap_mask].primitives << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, r: 0, g: 0, b: 0, primitive_marker: :solid }
-
 
 
     # Draw maze as a minimap
@@ -1285,13 +1284,11 @@ class Game
 
     if focus != @lost_focus
       if focus
-        # putz "lost focus"
         audio[:music].paused = true
         audio[:wind].paused = true
         audio[:engine0].gain = 0.0
         audio[:engine1].gain = 0.0
-      else
-        # putz "gained focus"
+      elsif @current_scene == :tick_game_scene
         audio[:music].paused = false
         audio[:wind].paused = false
       end
@@ -1347,7 +1344,7 @@ class Game
       max_speed: 10.0,
     }
 
-    audio[:menu_music] ||= {
+    audio[:menu_music] = {
       input: 'sounds/main-menu.ogg',
       gain: 0.8,
       paused: true,
