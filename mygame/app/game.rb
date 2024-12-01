@@ -660,7 +660,7 @@ class Game
       h: 24,
       anchor_x: 0.5,
       anchor_y: 0.5,
-      path: 'sprites/He.png',
+      path: 'sprites/he.png',
       primitive_marker: :sprite
     }
   end
