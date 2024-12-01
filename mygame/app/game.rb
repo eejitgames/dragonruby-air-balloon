@@ -18,9 +18,11 @@ class Game
   end
 
   def tick_title_scene
-    #audio[:menu_music].paused = false
+    audio[:menu_music].paused = false
 
-    outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
+    outputs.sprites << { x: 0, y: 0, w: @screen_width, h: @screen_height, path: 'sprites/splash.png' }
+
+    outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "click or tap to begin", alignment_enum: 1, font: 'fonts/Chango-Regular.ttf', size_enum: 2, r: 255, g: 255, b: 255, anchor_x: 0.5, anchor_y: 0.5 }
     return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
@@ -427,7 +429,9 @@ class Game
 
     outputs[:minimap_mask].w = @minimap_width
     outputs[:minimap_mask].h = @minimap_height
-    outputs[:minimap_mask].clear_before_render = !@defaults_set
+    outputs[:minimap_mask].primitives << { x: 0, y: 0, w: @minimap_width, h: @minimap_height, r: 0, g: 0, b: 0, primitive_marker: :solid }
+
+
 
     # Draw maze as a minimap
     @maze.each do |row|
@@ -457,7 +461,7 @@ class Game
     view_rect_x = (@viewport[:w] / (@maze_width * @maze_cell_w)) * @minimap_width
     view_rect_y = (@viewport[:h] / (@maze_height * @maze_cell_h)) * @minimap_height
 
-    outputs[:minimap_mask].clear_before_render = false
+    outputs[:minimap_mask].clear_before_render = !@defaults_set
     outputs[:minimap_mask].solids << {
       x: minimap_player_x,
       y: minimap_player_y,
@@ -548,11 +552,12 @@ class Game
   end
 
   def create_goal
+    w, h = GTK.calcspritebox('sprites/shop.png')
     @goal = {
       x: @maze_width * @maze_cell_w - @wall_thickness - @maze_cell_w * 0.5,
       y: @maze_height * @maze_cell_h - @wall_thickness - @maze_cell_h * 0.5,
-      w: 128,
-      h: 128,
+      w: w * 1.5,
+      h: h * 1.5,
       path: 'sprites/shop.png'
     }
   end
@@ -1439,7 +1444,7 @@ class Game
 
     @balloon_particles = Particles.new('sprites/star.png', @camera, @screen_width, @screen_height, -5.0)
 
-    @defaults_set = :true
+    @defaults_set = true
   end
 end
 
