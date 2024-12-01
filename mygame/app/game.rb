@@ -129,13 +129,22 @@ class Game
   end
 
   def tick_game_over_scene
-    @start_tick ||= Kernel.tick_count
+    if @reset_game_over
+      puts "Resetting game over scene"
+      @start_tick = Kernel.tick_count
+      text_w, _ = GTK.calcstringbox("Game Over !", 40, "fonts/Chango-Regular.ttf")
+      segments = text_w.to_i
+      @gameover_y_offsets = Array.new(segments, 0)
+      @drip_start_ticks = Array.new(segments) { Kernel.tick_count + 30 + rand * 150 }
+      @reset_game_over = false # Ensure this only runs once when entering
+    end
+
+    # Animation logic
     elapsed_ticks = Kernel.tick_count - @start_tick
     game_over_y = elapsed_ticks
-    outputs.sprites << { x: 0, y: -game_over_y, w: @screen_width, h: @screen_height, path: 'sprites/game_over.png'}
+    outputs.sprites << { x: 0, y: -game_over_y, w: @screen_width, h: @screen_height, path: 'sprites/game_over.png' }
 
     text_w, text_h = GTK.calcstringbox("Game Over !", 40, "fonts/Chango-Regular.ttf")
-
     outputs[:game_over].w = text_w
     outputs[:game_over].h = text_h
     outputs[:game_over].labels << {
@@ -151,24 +160,22 @@ class Game
       anchor_y: 0.0
     }
 
+    # Dripping animation
     segments = text_w.to_i
     segment_w = 1
-    @gameover_y_offsets ||= Array.new(segments) { 0 } # Initialize offsets to 0
-    @drip_start_ticks ||= Array.new(segments) { Kernel.tick_count + 30 + rand * 150 } # Random start delay for each segment
     max_offset = 400.0
-
     base_x = @screen_width * 0.5 - text_w * 0.5
 
     i = 0
     while i < segments
       if Kernel.tick_count > @drip_start_ticks[i]
         y_offset = @gameover_y_offsets[i]
-        @gameover_y_offsets[i] = [y_offset + 0.5 + rand * 1.5, max_offset].min # Increase offset randomly
+        @gameover_y_offsets[i] = [y_offset + 0.5 + rand * 1.5, max_offset].min
       end
 
       outputs.sprites << {
         x: base_x + i * segment_w,
-        y: @screen_height - text_h - @gameover_y_offsets[i], # Adjust y position based on offset
+        y: @screen_height - text_h - @gameover_y_offsets[i],
         w: segment_w,
         h: text_h,
         path: :game_over,
@@ -180,10 +187,10 @@ class Game
       i += 1
     end
 
-
     return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
+      @reset_game_over = true
       @next_scene = :tick_game_scene
       @defaults_set = false
       @start_tick = nil
@@ -1444,6 +1451,7 @@ class Game
   def defaults
     return if @defaults_set
 
+    @reset_game_over = true
     @lost_focus = true
     @clock = 0
     @current_scene ||= :tick_title_scene
