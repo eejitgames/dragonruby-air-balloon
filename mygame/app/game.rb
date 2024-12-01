@@ -404,24 +404,18 @@ class Game
   end
 
   def draw_goal(ffi)
-    ffi.draw_solid(x_to_screen(@goal[:x]),
-                   y_to_screen(@goal[:y]),
-                   @goal[:w] * @camera[:zoom],
-                   @goal[:h] * @camera[:zoom],
-                   @goal[:r],
-                   @goal[:g],
-                   @goal[:b],
-                   @goal[:a])
+    ffi.draw_sprite(x_to_screen(@goal[:x]),
+                    y_to_screen(@goal[:y]),
+                    @goal[:w] * @camera[:zoom],
+                    @goal[:h] * @camera[:zoom],
+                    'sprites/shop.png')
 
     if @wrapped_viewport
-      ffi.draw_solid(x_to_screen(@goal[:x] - @maze_width * @maze_cell_w),
-                     y_to_screen(@goal[:y]),
-                     @goal[:w] * @camera[:zoom],
-                     @goal[:h] * @camera[:zoom],
-                     @goal[:r],
-                     @goal[:g],
-                     @goal[:b],
-                     @goal[:a])
+      ffi.draw_sprite(x_to_screen(@goal[:x] - @maze_width * @maze_cell_w),
+                      y_to_screen(@goal[:y]),
+                      @goal[:w] * @camera[:zoom],
+                      @goal[:h] * @camera[:zoom],
+                      'sprites/shop.png')
     end
   end
 
@@ -559,14 +553,10 @@ class Game
       y: @maze_height * @maze_cell_h - @wall_thickness - @maze_cell_h * 0.5,
       w: 128,
       h: 128,
-      r: 255,
-      g: 0,
-      b: 0,
-      a: 128,
-      path: 'sprites/shop.png',
-      primitive_marker: :sprite
+      path: 'sprites/shop.png'
     }
   end
+
   def draw_hud
     # Timer
     angle = Math.sin(@clock * 0.05) * 5
