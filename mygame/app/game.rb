@@ -1351,7 +1351,7 @@ class Game
       looping: true,
     }
 
-    audio[:music] =
+    audio[:music] ||=
       {
       input: 'sounds/up-up-and-away.ogg',
       x: 0.0,
