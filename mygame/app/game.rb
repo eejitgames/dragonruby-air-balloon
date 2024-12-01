@@ -51,6 +51,7 @@ class Game
 
   def tick_game_over_scene
     outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Game Over !", alignment_enum: 1 }
+    return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
@@ -562,7 +563,8 @@ class Game
       g: 0,
       b: 0,
       a: 128,
-      primitive_marker: :solid
+      path: 'sprites/shop.png',
+      primitive_marker: :sprite
     }
   end
   def draw_hud
