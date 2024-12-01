@@ -18,9 +18,10 @@ class Game
   end
 
   def tick_title_scene
-    audio[:menu_music].paused = false
+    #audio[:menu_music].paused = false
 
     outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Title Scene (click or tap to begin)", alignment_enum: 1 }
+    return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
@@ -456,7 +457,7 @@ class Game
     # Calculate player's position in the minimap space
     minimap_player_x = normalized_player_x / @maze_cell_w * @minimap_cell_size
     minimap_player_y = normalized_player_y / @maze_cell_h * @minimap_cell_size
-    
+
     # Draw the viewport rect into the mask
     view_rect_x = (@viewport[:w] / (@maze_width * @maze_cell_w)) * @minimap_width
     view_rect_y = (@viewport[:h] / (@maze_height * @maze_cell_h)) * @minimap_height
@@ -1290,6 +1291,8 @@ class Game
         # putz "lost focus"
         audio[:music].paused = true
         audio[:wind].paused = true
+        audio[:engine0].gain = 0.0
+        audio[:engine1].gain = 0.0
       else
         # putz "gained focus"
         audio[:music].paused = false
@@ -1350,7 +1353,7 @@ class Game
     audio[:menu_music] ||= {
       input: 'sounds/main-menu.ogg',
       gain: 0.8,
-      paused: false,
+      paused: true,
       looping: true,
     }
 
@@ -1368,7 +1371,7 @@ class Game
     audio[:engine0] ||= {
       input: 'sounds/engine0.ogg',
       looping: true,
-      gain: 1.0,
+      gain: 0.0,
     }
 
     audio[:engine1] ||= {
@@ -1378,7 +1381,7 @@ class Game
     }
 
     audio[:wind] ||= {
-      input: 'sounds/Wind.ogg',
+      input: 'sounds/wind.ogg',
       x: 0.0,
       y: 0.0,
       z: 0.0,
