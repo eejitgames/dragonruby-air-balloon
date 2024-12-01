@@ -46,7 +46,11 @@ class Particles
       if @particles[i + 6] <= 0 || @particles[i + 11] <= 0
         @num_particles -= 1
         last_index = @num_particles * STRIDE
-        STRIDE.times { |j| @particles[i + j] = @particles[last_index + j] }
+        j = 0
+        while j < STRIDE
+          @particles[i + j] = @particles[last_index + j]
+          j += 1
+        end
       end
 
       i -= STRIDE
@@ -72,8 +76,8 @@ class Particles
       b = @particles[i + 10]
       a = @particles[i + 11]
 
-      ffi.draw_sprite_5((x - camera_x * camera_zoom) + screen_width * 0.5, # x
-                        (y - camera_y) * camera_zoom + screen_height * 0.5, # y
+      ffi.draw_sprite_5(((x - camera_x) * camera_zoom) + screen_width * 0.5, # x
+        ((y - camera_y) * camera_zoom) + screen_height * 0.5, # y
                         w * camera_zoom, # w
                         h * camera_zoom, # h
                         path,            # path

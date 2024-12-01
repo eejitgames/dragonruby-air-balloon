@@ -301,6 +301,7 @@ class Game
 
     # Tick particles
     @balloon_particles.tick
+    @helium_particles.tick
 
     # Calc Wind
     new_wind_gain = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) * @wind_gain_multiplier
@@ -323,6 +324,7 @@ class Game
     draw_birds(ffi)
 
     @balloon_particles.draw_override(ffi)
+    @helium_particles.draw_override(ffi)
 
     draw_parallax_layer_tiles(@bg_parallax * 4, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
   end
@@ -815,6 +817,17 @@ class Game
       if item[:item_type] == :helium
         args.audio[:hiss] = { input: "sounds/hiss.ogg", gain: 1.0 }
         @player[:helium] = 100
+
+        particle_count = 100
+        while particle_count > 0
+          angle = rand * Math::PI
+          speed = rand * 2 + 1
+          x_offset = Math.cos(angle) * speed
+          y_offset = Math.sin(angle) * speed
+          @helium_particles.spawn(@player[:x] + x_offset, @player[:y] + y_offset, 16, 16, x_offset, y_offset, 30, 16, 255, 255, 255, 64)
+          particle_count -= 1
+        end
+
         @items.delete(item)
       end
     end
@@ -1519,6 +1532,7 @@ class Game
     # Configure clouds
     @cloud_bounciness = 0.75 # 0..1 representing energy loss on bounce
 
+    @helium_particles = Particles.new('sprites/bubble.png', @camera, @screen_width, @screen_height, 5.0)
     @balloon_particles = Particles.new('sprites/star.png', @camera, @screen_width, @screen_height, -5.0)
 
     @defaults_set = true
