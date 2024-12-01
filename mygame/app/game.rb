@@ -240,7 +240,7 @@ class Game
     max_velocity = @player[:max_speed]
 
     clamped_velocity = [velocity, max_velocity].min
-    gain_engine0 = 1.0 - clamped_velocity / max_velocity
+    gain_engine0 = 6.0 - clamped_velocity / max_velocity
     gain_engine1 = clamped_velocity / max_velocity
 
     audio[:engine0].gain = gain_engine0
@@ -1491,7 +1491,7 @@ class Game
 
     audio[:menu_music] = {
       input: 'sounds/main-menu.ogg',
-      gain: 0.8,
+      gain: 0.7,
       paused: true,
       looping: true,
     }
@@ -1502,7 +1502,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.75,
+      gain: 0.6,
       paused: true,
       looping: true
     }
