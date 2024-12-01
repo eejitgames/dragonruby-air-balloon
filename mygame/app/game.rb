@@ -1348,7 +1348,7 @@ class Game
     }
 
     audio[:menu_music] ||= {
-      input: 'sounds/InGameTheme20secGJ.ogg',
+      input: 'sounds/main-menu.ogg',
       gain: 0.8,
       paused: false,
       looping: true,
