@@ -49,6 +49,83 @@ class Game
     if @timer <= 0
       @current_scene = :tick_game_over_scene
     end
+
+    if @player.intersect_rect?(@goal)
+      @current_scene = :tick_game_won_scene
+    end
+  end
+
+  def tick_game_won_scene
+    angle = (Kernel.tick_count * -0.05) % 360
+    scale = Math.sin(Kernel.tick_count * 0.05).abs * 100
+
+    outputs.sprites << {
+      x: @screen_width * 0.5,
+      y: @screen_height * 0.5,
+      w: 640 + scale,
+      h: 640 + scale,
+      r: 255,
+      g: 242,
+      b: 148,
+      angle: angle,
+      path: 'sprites/double_star.png',
+      anchor_x: 0.5,
+      anchor_y: 0.5
+    }
+
+    angle = Math.sin(Kernel.tick_count * 0.05) * 5
+    outputs.sprites << {
+      x: @screen_width * 0.5,
+      y: @screen_height * 0.5,
+      w: 320,
+      h: 640,
+      angle: angle,
+      path: 'sprites/slushy.png',
+      anchor_x: 0.5,
+      anchor_y: 0.5
+    }
+
+    args.outputs.labels << {
+      x: @screen_width * 0.5,
+      y: @screen_height - @screen_height * 0.1,
+      size_enum: 48,
+      font: 'fonts/Chango-Regular.ttf',
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      r: 255,
+      g: 227,
+      b: 149,
+      text: "You Won!",
+    }
+
+    text = "BRAIN FREEZE"
+    base_y = @screen_height * 0.1
+    amplitude = 20
+    frequency = 0.1
+
+    red = { r: 255, g: 0, b: 0 }
+    gold = { r: 255, g: 242, b: 148 }
+
+    text.chars.each_with_index do |char, index|
+      offset = index * 15
+      y = base_y + Math.sin(Kernel.tick_count * frequency + offset) * amplitude
+      x = index * 50
+
+      args.outputs.labels << {
+        x: 90 + x,
+        y: y,
+        size_enum: 32,
+        font: 'fonts/Chango-Regular.ttf',
+        anchor_x: 0.5,
+        anchor_y: 0.5,
+        text: char,
+      }.merge!(index % 2 == 0 ? red : gold)
+    end
+
+    if $gtk.args.inputs.mouse.click
+      @next_scene = :tick_game_scene
+      @defaults_set = false
+    end
   end
 
   def tick_game_over_scene
