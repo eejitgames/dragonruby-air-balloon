@@ -129,12 +129,64 @@ class Game
   end
 
   def tick_game_over_scene
-    outputs.labels << { x: @screen_width / 2, y: @screen_height / 2, text: "Game Over !", alignment_enum: 1 }
+    @start_tick ||= Kernel.tick_count
+    elapsed_ticks = Kernel.tick_count - @start_tick
+    game_over_y = elapsed_ticks
+    outputs.sprites << { x: 0, y: -game_over_y, w: @screen_width, h: @screen_height, path: 'sprites/game_over.png'}
+
+    text_w, text_h = GTK.calcstringbox("Game Over !", 40, "fonts/Chango-Regular.ttf")
+
+    outputs[:game_over].w = text_w
+    outputs[:game_over].h = text_h
+    outputs[:game_over].labels << {
+      x: 0,
+      y: 0,
+      text: "Game Over !",
+      font: "fonts/Chango-Regular.ttf",
+      size_enum: 40,
+      r: 255,
+      g: 84,
+      b: 84,
+      anchor_x: 0.0,
+      anchor_y: 0.0
+    }
+
+    segments = text_w.to_i
+    segment_w = 1
+    @gameover_y_offsets ||= Array.new(segments) { 0 } # Initialize offsets to 0
+    @drip_start_ticks ||= Array.new(segments) { Kernel.tick_count + 30 + rand * 150 } # Random start delay for each segment
+    max_offset = 400.0
+
+    base_x = @screen_width * 0.5 - text_w * 0.5
+
+    i = 0
+    while i < segments
+      if Kernel.tick_count > @drip_start_ticks[i]
+        y_offset = @gameover_y_offsets[i]
+        @gameover_y_offsets[i] = [y_offset + 0.5 + rand * 1.5, max_offset].min # Increase offset randomly
+      end
+
+      outputs.sprites << {
+        x: base_x + i * segment_w,
+        y: @screen_height - text_h - @gameover_y_offsets[i], # Adjust y position based on offset
+        w: segment_w,
+        h: text_h,
+        path: :game_over,
+        source_x: i * segment_w,
+        source_y: 0,
+        source_w: segment_w,
+        source_h: text_h
+      }
+      i += 1
+    end
+
+
     return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
       @defaults_set = false
+      @start_tick = nil
     end
   end
 
