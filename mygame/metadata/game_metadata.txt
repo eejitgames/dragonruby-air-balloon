@@ -1,6 +1,6 @@
 # Remove the pound sign and leading space for the properties below before publishing your game.
 devid=eejit
-devtitle=eejit
+devtitle=eejit and xenobrain
 gameid=balloon-dash
 gametitle=balloon-dash
 version=1.0
