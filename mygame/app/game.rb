@@ -15,6 +15,15 @@ class Game
   def tick_title_scene
     audio[:menu_music].paused = false
 
+    # Fade in music
+    if @title_scene_ticks < 60
+      audio[:menu_music].gain = @title_scene_ticks / 120.0 # 60 ticks to reach 0.5 gain
+    else
+      audio[:menu_music].gain = 0.5
+    end
+
+    @title_scene_ticks += 1
+
     outputs.sprites << { x: 0, y: 0, w: @screen_width, h: @screen_height, path: 'sprites/splash.png' }
 
     text_w, text_h = GTK.calcstringbox('click or tap to begin', 2, "fonts/Chango-Regular.ttf")
@@ -135,7 +144,6 @@ class Game
 
   def tick_game_over_scene
     if @reset_game_over
-      puts "Resetting game over scene"
       @start_tick = Kernel.tick_count
       text_w, _ = GTK.calcstringbox("Game Over !", 40, "fonts/Chango-Regular.ttf")
       segments = text_w.to_i
@@ -234,7 +242,7 @@ class Game
     @player_flip = false if dx > 0
     @player_flip = true if dx < 0
 
-    # handle_touch_input
+    handle_touch_input
   end
 
   def handle_touch_input
@@ -242,13 +250,12 @@ class Game
       if point.global_down_at == point.global_moved_at
         # This is the start of a touch
         @initial_touch = { x: point.x, y: point.y }
-        @boost_input_dx = nil
-        @boost_input_dy = nil
 
         # Double-tap detection
         current_time = Kernel.tick_count
         if @last_tap_time && (current_time - @last_tap_time) < 18
-          player_boost if @boost_input_dx && @boost_input_dy
+          # Trigger the boost if double-tap is detected
+          player_boost
           @last_tap_time = nil  # Reset last tap time to avoid triple-tap detection
         else
           @last_tap_time = current_time
@@ -279,7 +286,7 @@ class Game
         @boost_input_dy = dy
 
         # Swiping input needs some extra speed
-        speed_multiplier = 3.0
+        speed_multiplier = 4.0
         dx *= speed_multiplier
         dy *= speed_multiplier
 
@@ -298,11 +305,15 @@ class Game
     return if @player[:boosting]
 
     @player[:boosting] = true
-    @player[:boost_remaining] = @player[:boost_duration]
+    @player[:boost_remaining] = @player[:boost_duration] || 30  # Default to 30 if nil
 
     # Disable cloud bounciness while boosting
-    @original_cloud_bounciness = @cloud_bounciness
+    @original_cloud_bounciness = @cloud_bounciness || 0  # Default to 0 if nil
     @cloud_bounciness = 0
+
+    # Ensure @boost_input_dx and @boost_input_dy are not nil
+    @boost_input_dx ||= 0
+    @boost_input_dy ||= 0
 
     magnitude = Math.sqrt(@boost_input_dx**2 + @boost_input_dy**2)
     return if magnitude == 0
@@ -1501,6 +1512,7 @@ class Game
   def defaults
     return if @defaults_set
 
+    @title_scene_ticks = 0
     @reset_game_over = true
     @lost_focus = true
     @clock = 0
@@ -1534,6 +1546,8 @@ class Game
       dy: 0.0,
       boost: 800.0,
       boosting: false,
+      boost_dx: 0.0,
+      boost_dy: 0.0,
       boost_remaining: 0,
       boost_duration: 30, # in ticks
       last_boost_time: -Float::INFINITY,
@@ -1549,7 +1563,7 @@ class Game
 
     audio[:menu_music] = {
       input: 'sounds/main-menu.ogg',
-      gain: 0.7,
+      gain: 0.5,
       paused: true,
       looping: true,
     }
@@ -1560,7 +1574,7 @@ class Game
       x: 0.0,
       y: 0.0,
       z: 0.0,
-      gain: 0.6,
+      gain: 0.5,
       paused: true,
       looping: true
     }
