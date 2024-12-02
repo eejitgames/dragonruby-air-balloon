@@ -1,4 +1,4 @@
-dragonruby-air-balloon
+dragonruby-balloon-dash
 
 DragronRuby entry for the 20 second game jam, 2024
 

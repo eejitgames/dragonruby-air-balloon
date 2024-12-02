@@ -1,9 +1,9 @@
 # Remove the pound sign and leading space for the properties below before publishing your game.
 devid=eejit
 devtitle=eejit
-gameid=hotairbaloon
-gametitle=hotairbaloon
-version=0.1
+gameid=balloon-dash
+gametitle=balloon-dash
+version=1.0
 icon=metadata/icon.png
 
 # === Flags available at all licensing tiers ===
