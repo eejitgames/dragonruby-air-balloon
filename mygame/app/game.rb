@@ -349,7 +349,7 @@ class Game
     end
 
     # Decrement helium
-    @player[:helium] = (@player[:helium] - 0.15).clamp(0, 100)
+    @player[:helium] = (@player[:helium] - 0.20).clamp(0, 100)
   end
 
   def calc_camera
@@ -366,7 +366,8 @@ class Game
 
     # Adjust camera zoom based on player velocity
     player_velocity = Math.sqrt(@player[:vx] * @player[:vx] + @player[:vy] * @player[:vy]) / @player[:max_speed]
-    target_zoom = 1.0 - 0.1 * player_velocity  # Zoom out more as speed increases
+    adjusted_velocity = Math.sqrt(player_velocity) * 1.5
+    target_zoom = 1.0 - 0.1 * adjusted_velocity
     @camera[:zoom] = @camera[:zoom].lerp(target_zoom, @camera[:zoom_speed])  # Smooth transition with lerp
 
     @viewport = {
@@ -416,9 +417,8 @@ class Game
   end
 
   def draw_override ffi
-    draw_parallax_layer_tiles(@bg_parallax, 'sprites/cloudy_background.png', ffi)
-    draw_parallax_layer_tiles(@bg_parallax * 2, 'sprites/cloudy_foreground.png', ffi, { a: 24, blendmode_enum: 2 })
-    draw_parallax_layer_tiles(@bg_parallax * 3, 'sprites/cloudy_foreground.png', ffi, { a: 24, blendmode_enum: 2 })
+    draw_parallax_layer_tiles(@bg_parallax * 0.75, 'sprites/cloudy_background.png', ffi)
+    draw_parallax_layer_tiles(@bg_parallax * 2.5, 'sprites/cloudy_foreground.png', ffi, { a: 40, blendmode_enum: 2 })
     draw_maze(ffi)
     draw_goal(ffi)
     draw_items(ffi)
@@ -429,7 +429,7 @@ class Game
     @balloon_particles.draw_override(ffi)
     @helium_particles.draw_override(ffi)
 
-    draw_parallax_layer_tiles(@bg_parallax * 4, 'sprites/cloudy_foreground.png', ffi, { a: 32, blendmode_enum: 2 })
+    draw_parallax_layer_tiles(@bg_parallax * 5, 'sprites/cloudy_foreground.png', ffi, { a: 40, blendmode_enum: 2 })
   end
 
   def draw_parallax_layer_tiles(parallax_multiplier, image_path, ffi, render_options = {})
@@ -952,10 +952,10 @@ class Game
     current_collisions.each do |bird|
       unless @current_bird_collisions[bird]
         # Play sound on begin overlap
-        args.audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
+        audio[:crow] = { input: "sounds/crow#{(rand * 4).to_i}.ogg" }
         @player[:helium] -= @bird_helium_damage
         @current_bird_collisions[bird] = true
-        trauma = Math.sqrt(bird[:vx]**2 + bird[:vy]**2) * 0.01
+        trauma = Math.sqrt(bird[:vx]**2 + bird[:vy]**2) * 0.015
         @camera[:trauma] += trauma
       end
 
@@ -974,28 +974,18 @@ class Game
       next if overlap_y < 0
 
       if dx < dy
-        depth = dx
         if dx < 0
-          nx = -1.0
-          ny = 0.0
           px = collision_mid_x - collision_half_w
           py = collision_mid_y
         else
-          nx = 1.0
-          ny = 0.0
           px = collision_mid_x + collision_half_w
           py = collision_mid_y
         end
       else
-        depth = dy
         if dy < 0
-          nx = 0.0
-          ny = -1.0
           px = collision_mid_x
           py = collision_mid_y - collision_half_h
         else
-          nx = 0.0
-          ny = 1.0
           px = collision_mid_x
           py = collision_mid_y + collision_half_h
         end
@@ -1006,11 +996,6 @@ class Game
       vx = bird[:vx] * r * -1.5
       vy = bird[:vy] * r * -1.5
 
-      bird_x = bird[:x]
-      if (bird_x - @player[:x]).abs > @screen_width
-        bird_x = bird_x > @player[:x] ? bird_x - maze_world_width : bird_x + maze_world_width
-      end
-
       @balloon_particles.spawn(px + bird[:w] * 0.5, py + bird[:h] * 0.5, 16, 16, vx, vy, 120, 16, 255, color, 0, 255)
     end
 
@@ -1018,7 +1003,6 @@ class Game
     @current_bird_collisions.each_key do |bird|
       unless current_collisions.include?(bird)
         @current_bird_collisions.delete(bird)
-
       end
     end
   end
@@ -1028,15 +1012,12 @@ class Game
 
     canister = { w: image_w * 0.1, h: image_h * 0.1, r: 255, g: 255, b: 0, item_type: :coin, anchor_x: 0.5, anchor_y: 0.5, path: 'sprites/helium.png', item_type: :helium, primitive_marker: :sprite }
 
-    max_canisters_per_cell = 1
-    canister_chance_per_cell = 0.3
-
     @canisters = []
 
     @maze.each do |row|
       row.each do |cell|
-        max_canisters_per_cell.times do
-          next unless rand < canister_chance_per_cell
+        @max_canisters_per_cell.times do
+          next unless rand < @canister_chance_per_cell
 
           loop do
             quantized_x = (cell[:col] * @maze_cell_w + @wall_thickness + canister[:w] * 0.5 + rand(@maze_cell_w - 2 * @wall_thickness) - canister[:w] * 0.5) / @wall_thickness * @wall_thickness
@@ -1406,6 +1387,36 @@ class Game
 
     player_sprite_index = 0.frame_index(count: 4, tick_count_override: @clock, hold_for: hold_for, repeat: true)
 
+
+    if @player[:trail]
+      @player[:trail].each_with_index do |pos, index|
+        ffi.draw_sprite_5(x_to_screen(pos[:x]),  # x
+                          y_to_screen(pos[:y]),  # y
+                          @player[:w] * @camera[:zoom],  # w
+                          @player[:h] * @camera[:zoom],  # h
+                          "sprites/balloon_#{player_sprite_index + 1}.png",  # path
+                          nil,  # angle
+                          pos[:alpha],  # alpha
+                          nil,  # r
+                          nil,  # g,
+                          nil,  # b
+                          nil,  # tile_x
+                          nil,  # tile_y
+                          nil,  # tile_w
+                          nil,  # tile_h
+                          @player_flip,  # flip_horizontally
+                          nil,  # flip_vertically
+                          nil,  # angle_anchor_x
+                          nil,  # angle_anchor_y
+                          nil,  # source_x
+                          nil,  # source_y
+                          nil,  # source_w,
+                          nil,  # source_h
+                          nil,  # blendmode_enum
+                          0.5,  # anchor_x
+                          0.5)  # anchor_y
+        end
+
     ffi.draw_sprite_5(x_to_screen(@player[:x]), # x
                       y_to_screen(@player[:y]), # y
                       @player[:w] * @camera[:zoom], # w
@@ -1432,36 +1443,6 @@ class Game
                       0.5, # anchor_x
                       0.5) # anchor_y
 
-
-    if @player[:trail]
-      @player[:trail].each_with_index do |pos, index|
-
-        ffi.draw_sprite_5(x_to_screen(pos[:x]),  # x
-                          y_to_screen(pos[:y]),  # y
-                          @player[:w] * @camera[:zoom],  # w
-                          @player[:h] * @camera[:zoom],  # h
-                          "sprites/balloon_#{player_sprite_index + 1}.png",  # path
-                          nil,  # angle
-                          pos[:alpha],  # alpha
-                          nil,  # r
-                          nil,  # g,
-                          nil,  # b
-                          nil,  # tile_x
-                          nil,  # tile_y
-                          nil,  # tile_w
-                          nil,  # tile_h
-                          @player_flip,  # flip_horizontally
-                          nil,  # flip_vertically
-                          nil,  # angle_anchor_x
-                          nil,  # angle_anchor_y
-                          nil,  # source_x
-                          nil,  # source_y
-                          nil,  # source_w,
-                          nil,  # source_h
-                          nil,  # blendmode_enum
-                          0.5,  # anchor_x
-                          0.5)  # anchor_y
-      end
     end
   end
 
@@ -1620,21 +1601,24 @@ class Game
     @bg_parallax = 0.3
 
     # Create Items
+    @max_canisters_per_cell = 1
+    @canister_chance_per_cell = 0.2
     create_helium
+
     create_items
 
     # Birds
     @birds = []
-    @bird_spawn_interval = 120
+    @bird_spawn_interval = 100
     @bird_spawn_variance = 30
-    @bird_helium_damage = 5
+    @bird_helium_damage = 10
 
     # Configure wind
     @wind_gain_multiplier = 0.05
     @wind_gain_speed = 0.5
 
     # Configure clouds
-    @cloud_bounciness = 0.75 # 0..1 representing energy loss on bounce
+    @cloud_bounciness = 1.0 # 0..1 representing energy loss on bounce
 
     @helium_particles = Particles.new('sprites/bubble.png', @camera, @screen_width, @screen_height, 5.0)
     @balloon_particles = Particles.new('sprites/star.png', @camera, @screen_width, @screen_height, -5.0)
