@@ -122,6 +122,11 @@ class Game
       }.merge!(index % 2 == 0 ? red : gold)
     end
 
+    # Hack, reset engine gain
+    audio[:engine0].gain = 0.0
+    audio[:engine1].gain = 0.0
+
+
     if $gtk.args.inputs.mouse.click
       @next_scene = :tick_game_scene
       @defaults_set = false
@@ -136,6 +141,11 @@ class Game
       segments = text_w.to_i
       @gameover_y_offsets = Array.new(segments, 0)
       @drip_start_ticks = Array.new(segments) { Kernel.tick_count + 30 + rand * 150 }
+
+      # Hack, reset engine gain
+      audio[:engine0].gain = 0.0
+      audio[:engine1].gain = 0.0
+
       @reset_game_over = false # Ensure this only runs once when entering
     end
 
@@ -224,48 +234,63 @@ class Game
     @player_flip = false if dx > 0
     @player_flip = true if dx < 0
 
-    handle_touch_input
+    # handle_touch_input
   end
 
   def handle_touch_input
     inputs.touch.each do |k, point|
-        if point.global_down_at == point.global_moved_at
-          # This is the start of a touch
-          @initial_touch = { x: point.x, y: point.y }
-        elsif point.moved && @initial_touch
-          # This is a move event after the touch start
-          dx = point.x - @initial_touch.x
-          dy = point.y - @initial_touch.y
+      if point.global_down_at == point.global_moved_at
+        # This is the start of a touch
+        @initial_touch = { x: point.x, y: point.y }
+        @boost_input_dx = nil
+        @boost_input_dy = nil
 
-          # Calculate the direction of the swipe
-          if dx.abs > dy.abs
-            dx = dx.positive? ? 1 : -1
-            dy = 0
-          else
-            dy = dy.positive? ? 1 : -1
-            dx = 0
-          end
-
-          # Normalize the input so diagonal movements aren't faster
-          if dx != 0 || dy != 0
-            l = 1.0 / Math.sqrt(dx * dx + dy * dy)
-            dx *= l
-            dy *= l
-          end
-
-          # Swiping input needs some extra speed
-          speed_multiplier = 3.0
-          dx *= speed_multiplier
-          dy *= speed_multiplier
-
-          @player[:vx] = (@player[:vx] + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
-          @player[:vy] = (@player[:vy] + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
-          @player_flip = false if dx > 0
-          @player_flip = true if dx < 0
-
-          # Reset initial touch point
-          @initial_touch = nil
+        # Double-tap detection
+        current_time = Kernel.tick_count
+        if @last_tap_time && (current_time - @last_tap_time) < 18
+          player_boost if @boost_input_dx && @boost_input_dy
+          @last_tap_time = nil  # Reset last tap time to avoid triple-tap detection
+        else
+          @last_tap_time = current_time
         end
+      elsif point.moved && @initial_touch
+        # This is a move event after the touch start
+        dx = point.x - @initial_touch[:x]
+        dy = point.y - @initial_touch[:y]
+
+        # Calculate the direction of the swipe
+        if dx.abs > dy.abs
+          dx = dx.positive? ? 1 : -1
+          dy = 0
+        else
+          dy = dy.positive? ? 1 : -1
+          dx = 0
+        end
+
+        # Normalize the input so diagonal movements aren't faster
+        if dx != 0 || dy != 0
+          l = 1.0 / Math.sqrt(dx * dx + dy * dy)
+          dx *= l
+          dy *= l
+        end
+
+        # Set boost direction based on swipe direction
+        @boost_input_dx = dx
+        @boost_input_dy = dy
+
+        # Swiping input needs some extra speed
+        speed_multiplier = 3.0
+        dx *= speed_multiplier
+        dy *= speed_multiplier
+
+        @player[:vx] = (@player[:vx] + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+        @player[:vy] = (@player[:vy] + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+        @player_flip = false if dx > 0
+        @player_flip = true if dx < 0
+
+        # Reset initial touch point
+        @initial_touch = nil
+      end
     end
   end
 
