@@ -223,6 +223,50 @@ class Game
 
     @player_flip = false if dx > 0
     @player_flip = true if dx < 0
+
+    handle_touch_input
+  end
+
+  def handle_touch_input
+    inputs.touch.each do |k, point|
+        if point.global_down_at == point.global_moved_at
+          # This is the start of a touch
+          @initial_touch = { x: point.x, y: point.y }
+        elsif point.moved && @initial_touch
+          # This is a move event after the touch start
+          dx = point.x - @initial_touch.x
+          dy = point.y - @initial_touch.y
+
+          # Calculate the direction of the swipe
+          if dx.abs > dy.abs
+            dx = dx.positive? ? 1 : -1
+            dy = 0
+          else
+            dy = dy.positive? ? 1 : -1
+            dx = 0
+          end
+
+          # Normalize the input so diagonal movements aren't faster
+          if dx != 0 || dy != 0
+            l = 1.0 / Math.sqrt(dx * dx + dy * dy)
+            dx *= l
+            dy *= l
+          end
+
+          # Swiping input needs some extra speed
+          speed_multiplier = 3.0
+          dx *= speed_multiplier
+          dy *= speed_multiplier
+
+          @player[:vx] = (@player[:vx] + dx * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+          @player[:vy] = (@player[:vy] + dy * @player[:speed]).clamp(-@player[:max_speed], @player[:max_speed])
+          @player_flip = false if dx > 0
+          @player_flip = true if dx < 0
+
+          # Reset initial touch point
+          @initial_touch = nil
+        end
+    end
   end
 
   def player_boost
