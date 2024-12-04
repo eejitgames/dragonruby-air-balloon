@@ -1,15 +1,31 @@
 class Game
   attr_gtk
+  attr_accessor :defaults_set, :next_scene, :screen_width, :screen_height
 
   def tick
     defaults
-    outputs.background_color = [ 0x92, 0xcc, 0xf0 ]
-    send(@current_scene)
+
+    outputs.background_color = [0x92, 0xcc, 0xf0]
+
+    if @enter_scene
+      send("enter_#{@current_scene}")
+      @enter_scene = false
+    end
+
+    send("tick_#{@current_scene}")
 
     if @next_scene
+      if @current_scene.is_a?(Symbol)
+        send("exit_#{@current_scene}")
+      end
+
       @current_scene = @next_scene
+      @enter_scene = true
       @next_scene = nil
     end
+  end
+
+  def enter_title_scene
   end
 
   def tick_title_scene
@@ -36,12 +52,18 @@ class Game
     return if game_has_lost_focus?
 
     if $gtk.args.inputs.mouse.click
-      @next_scene = :tick_game_scene
+      @next_scene = :game_scene
       audio[:menu_music].paused = true
       audio[:music].paused = false
       audio[:wind].paused = false
       @clock = 0
     end
+  end
+
+  def exit_title_scene
+  end
+
+  def enter_game_scene
   end
 
   def tick_game_scene
@@ -56,12 +78,18 @@ class Game
     draw_hud
 
     if @timer <= 0
-      @current_scene = :tick_game_over_scene
+      @next_scene = :game_over_scene
     end
 
     if @player.intersect_rect?(@goal)
-      @current_scene = :tick_game_won_scene
+      @next_scene = :game_won_scene
     end
+  end
+
+  def exit_game_scene
+  end
+
+  def enter_game_won_scene
   end
 
   def tick_game_won_scene
@@ -137,82 +165,24 @@ class Game
 
 
     if $gtk.args.inputs.mouse.click
-      @next_scene = :tick_game_scene
+      @next_scene = :game_scene
       @defaults_set = false
     end
   end
 
+  def exit_game_won_scene
+  end
+
+  def enter_game_over_scene
+    GameOverScreen.enter(self)
+  end
+
   def tick_game_over_scene
-    if @reset_game_over
-      @start_tick = Kernel.tick_count
-      text_w, _ = GTK.calcstringbox("Game Over !", 40, "fonts/Chango-Regular.ttf")
-      segments = text_w.to_i
-      @gameover_y_offsets = Array.new(segments, 0)
-      @drip_start_ticks = Array.new(segments) { Kernel.tick_count + 30 + rand * 150 }
+    GameOverScreen.tick
+  end
 
-      # Hack, reset engine gain
-      audio[:engine0].gain = 0.0
-      audio[:engine1].gain = 0.0
-
-      @reset_game_over = false # Ensure this only runs once when entering
-    end
-
-    # Animation logic
-    elapsed_ticks = Kernel.tick_count - @start_tick
-    game_over_y = elapsed_ticks
-    outputs.sprites << { x: 0, y: -game_over_y, w: @screen_width, h: @screen_height, path: 'sprites/game_over.png' }
-
-    text_w, text_h = GTK.calcstringbox("Game Over !", 40, "fonts/Chango-Regular.ttf")
-    outputs[:game_over].w = text_w
-    outputs[:game_over].h = text_h
-    outputs[:game_over].labels << {
-      x: 0,
-      y: 0,
-      text: "Game Over !",
-      font: "fonts/Chango-Regular.ttf",
-      size_enum: 40,
-      r: 255,
-      g: 84,
-      b: 84,
-      anchor_x: 0.0,
-      anchor_y: 0.0
-    }
-
-    # Dripping animation
-    segments = text_w.to_i
-    segment_w = 1
-    max_offset = 400.0
-    base_x = @screen_width * 0.5 - text_w * 0.5
-
-    i = 0
-    while i < segments
-      if Kernel.tick_count > @drip_start_ticks[i]
-        y_offset = @gameover_y_offsets[i]
-        @gameover_y_offsets[i] = [y_offset + 0.5 + rand * 1.5, max_offset].min
-      end
-
-      outputs.sprites << {
-        x: base_x + i * segment_w,
-        y: @screen_height - text_h - @gameover_y_offsets[i],
-        w: segment_w,
-        h: text_h,
-        path: :game_over,
-        source_x: i * segment_w,
-        source_y: 0,
-        source_w: segment_w,
-        source_h: text_h
-      }
-      i += 1
-    end
-
-    return if game_has_lost_focus?
-
-    if $gtk.args.inputs.mouse.click
-      @reset_game_over = true
-      @next_scene = :tick_game_scene
-      @defaults_set = false
-      @start_tick = nil
-    end
+  def exit_game_over_scene
+    GameOverScreen.exit
   end
 
   def input
@@ -1501,7 +1471,7 @@ class Game
         audio[:wind].paused = true
         audio[:engine0].gain = 0.0
         audio[:engine1].gain = 0.0
-      elsif @current_scene == :tick_game_scene
+      elsif @current_scene == :game_scene
         audio[:music].paused = false
         audio[:wind].paused = false
       end
@@ -1516,8 +1486,10 @@ class Game
     @reset_game_over = true
     @lost_focus = true
     @clock = 0
-    @current_scene ||= :tick_title_scene
-    @next_scene ||= nil
+
+    @enter_scene = true
+    @current_scene ||= :title_scene
+
     @tile_x = nil
     @tile_y = nil
     @screen_height = 1280
