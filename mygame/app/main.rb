@@ -1,6 +1,7 @@
 require_relative 'game'
 require_relative 'maze'
 require_relative 'particles'
+require_relative 'screens/game_over_screen'
 
 def boot args
   args.state = nil
